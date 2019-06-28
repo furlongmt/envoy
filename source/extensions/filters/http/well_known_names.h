@@ -12,10 +12,14 @@ namespace HttpFilters {
  */
 class HttpFilterNameValues {
 public:
+  // Adapt filter
+  const std::string Adapt = "envoy.adapt";
   // Buffer filter
   const std::string Buffer = "envoy.buffer";
   // CORS filter
   const std::string Cors = "envoy.cors";
+  // CSRF filter
+  const std::string Csrf = "envoy.csrf";
   // Dynamo filter
   const std::string Dynamo = "envoy.http_dynamo_filter";
   // Fault filter
@@ -52,6 +56,8 @@ public:
   const std::string HeaderToMetadata = "envoy.filters.http.header_to_metadata";
   // Tap filter
   const std::string Tap = "envoy.filters.http.tap";
+  // Original Src Filter
+  const std::string OriginalSrc = "envoy.filters.http.original_src";
 
   // Converts names from v1 to v2
   const Config::V1Converter v1_converter_;
@@ -63,7 +69,7 @@ public:
                        ExtAuthorization}) {}
 };
 
-typedef ConstSingleton<HttpFilterNameValues> HttpFilterNames;
+using HttpFilterNames = ConstSingleton<HttpFilterNameValues>;
 
 } // namespace HttpFilters
 } // namespace Extensions

@@ -23,6 +23,8 @@ EXTENSIONS = {
     # HTTP filters
     #
 
+    # MATT F ADDED ADAPT FILTER
+    "envoy.filters.http.adapt":                         "//source/extensions/filters/http/adapt:config",
     "envoy.filters.http.buffer":                        "//source/extensions/filters/http/buffer:config",
     "envoy.filters.http.cors":                          "//source/extensions/filters/http/cors:config",
     "envoy.filters.http.dynamo":                        "//source/extensions/filters/http/dynamo:config",
