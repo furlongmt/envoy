@@ -17,9 +17,9 @@ AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::Adapt
 }
 
 AdaptConfig::AdaptConfig(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
-                         Stats::Scope& scope, Runtime::Loader& runtime,
+                         Stats::Scope& scope, 
                          const std::string& stats_prefix, TimeSource& time_source)
-    : settings_(config), stats_(generateStats(stats_prefix, scope)), runtime_(runtime),
+    : settings_(config), stats_(generateStats(stats_prefix, scope)), 
       time_source_(time_source) {}
 
 InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& scope) {
@@ -67,7 +67,6 @@ Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool end_stream
     request_limiter_->writeData(data, end_stream);
     return Http::FilterDataStatus::StopIterationNoBuffer;
   }
-    ENVOY_LOG(critical, "DECODE DATA CALLED");
   return Http::FilterDataStatus::Continue;
 }
 
@@ -118,6 +117,8 @@ Http::FilterTrailersStatus Adapt::encodeTrailers(Http::HeaderMap&) {
 void Adapt::onDestroy() {
   if (response_limiter_ != nullptr)
     response_limiter_.reset();
+  if (request_limiter_ != nullptr)
+    request_limiter_.reset();
 }
 
 void Adapt::printStuff(uint64_t bytes) { ENVOY_LOG(critical, "IT WORKED, bytes = {}", bytes); }

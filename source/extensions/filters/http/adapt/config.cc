@@ -19,7 +19,7 @@ Http::FilterFactoryCb AdaptFilterFactory::createFilterFactoryFromProtoTyped(
     const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
     const std::string& stats_prefix, Server::Configuration::FactoryContext& context) {
   ConfigSharedPtr filter_config(
-      new AdaptConfig(config, context.scope(), context.runtime(), stats_prefix, context.timeSource()));
+      new AdaptConfig(config, context.scope(), stats_prefix, context.timeSource()));
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamFilter(std::make_shared<Adapt>(filter_config));
   };
@@ -50,10 +50,10 @@ AdaptFilterFactory::createRouteSpecificFilterConfigTyped(
 }
 */
 
-    /**
-     * Static registration for this sample filter. @see RegisterFactory.
-     */
-    REGISTER_FACTORY(AdaptFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory);
+/**
+ * Static registration for this sample filter. @see RegisterFactory.
+ */
+REGISTER_FACTORY(AdaptFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory);
 
 } // namespace AdaptFilter
 } // namespace HttpFilters

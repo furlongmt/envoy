@@ -47,8 +47,7 @@ private:
 class AdaptConfig {
 public:
   AdaptConfig(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
-    Stats::Scope& scope, Runtime::Loader& runtime,
-    const std::string& stats_prefix, TimeSource& time_source);
+    Stats::Scope& scope, const std::string& stats_prefix, TimeSource& time_source);
   const InstanceStats& stats() { return stats_; }
   const AdaptSettings* settings() { return &settings_; }
   TimeSource& timeSource() { return time_source_; }
@@ -58,7 +57,6 @@ private:
 
   const AdaptSettings settings_;
   const InstanceStats stats_;
-  Runtime::Loader& runtime_;
   TimeSource& time_source_;
 };
 
@@ -81,7 +79,6 @@ public:
   Http::FilterDataStatus decodeData(Buffer::Instance&, bool ) override;
   Http::FilterTrailersStatus decodeTrailers(Http::HeaderMap&) override;
   void setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbacks& callbacks) override {
-    ENVOY_LOG(critical, "INITIALIZED DECODER CALLBACKAS");
     decoder_callbacks_ = &callbacks;
   }
 
