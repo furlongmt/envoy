@@ -17,7 +17,7 @@ envoy_extension_cc_test(
     srcs = ["adapt_integration_test.cc"],
     extension_name = "envoy.filters.http.adapt",
     deps = [
-        "//source/extensions/filters/http/adapt:adapt_filter_lib",
+        "//source/extensions/filters/http/adapt:config",
         "//test/integration:http_protocol_integration_lib",
     ],
     args = ["-l critical"],

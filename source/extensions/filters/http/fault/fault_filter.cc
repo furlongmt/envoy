@@ -414,6 +414,11 @@ void StreamRateLimiter::onTokenTimer() {
   ENVOY_LOG(trace, "limiter: timer wakeup: buffered={}", buffer_.length());
   Buffer::OwnedImpl data_to_write;
 
+  if (!saw_data_) {
+    token_bucket_.reset(1);
+    saw_data_= true;
+  }
+
   // Compute the number of tokens needed (rounded up), try to obtain that many tickets, and then
   // figure out how many bytes to write given the number of tokens we actually got.
   const uint64_t tokens_needed =

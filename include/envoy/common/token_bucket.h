@@ -32,6 +32,8 @@ public:
    * returns the upper bound on the amount of time until a next token is available.
    */
   virtual std::chrono::milliseconds nextTokenAvailable() PURE;
+
+  virtual void reset(uint64_t num_tokens) PURE;
 };
 
 typedef std::unique_ptr<TokenBucket> TokenBucketPtr;

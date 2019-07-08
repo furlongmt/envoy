@@ -37,6 +37,7 @@ envoy_cc_library(
     srcs = ["config.cc"],
     hdrs = ["config.h"],
     deps = [
+        "//include/envoy/registry",
         "//include/envoy/server:filter_config_interface",
         "//source/extensions/filters/http/adapt:adapt_filter_lib",
         "//source/common/config:filter_json_lib",

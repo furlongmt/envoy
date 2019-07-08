@@ -13,7 +13,7 @@ namespace HttpFilters {
 class HttpFilterNameValues {
 public:
   // Adapt filter
-  const std::string Adapt = "envoy.adapt";
+  const std::string Adapt = "envoy.filters.http.adapt";
   // Buffer filter
   const std::string Buffer = "envoy.buffer";
   // CORS filter

@@ -6,7 +6,7 @@ class AdaptIntegrationTest : public Event::TestUsingSimulatedTime,
 public:
 
   void initializeFilter() {
-    config_helper_.addFilter("{ name: adapt-filter, config: { limit_kbps: 1 } }");
+    config_helper_.addFilter("{ name: envoy.filters.http.adapt, config: { limit_kbps: 1 } }");
     initialize();
   }
 };
@@ -25,7 +25,7 @@ TEST_P(AdaptIntegrationTest, Test1) {
   codec_client = makeHttpConnection(lookupPort("http"));
   auto r = codec_client->startRequest(default_request_headers_);
 
-  Buffer::OwnedImpl d(std::string(130, 'b'));
+  Buffer::OwnedImpl d(std::string(50, 'b'));
   r.first.encodeData(d, true); // for some reason simulated time doesn't seem to work here as the queue just goes...
   waitForNextUpstreamRequest();
   

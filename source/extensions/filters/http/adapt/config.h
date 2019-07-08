@@ -14,7 +14,8 @@ namespace AdaptFilter {
 class AdaptFilterFactory 
     : public Common::FactoryBase<envoy::config::filter::http::adapt::v2::AdaptRateLimit> {
 public:
-   AdaptFilterFactory() : FactoryBase(HttpFilterNames::get().Adapt) {}
+   AdaptFilterFactory() : FactoryBase(HttpFilterNames::get().Adapt) {
+   }
 
    Http::FilterFactoryCb createFilterFactory(const Json::Object& json_config,
                   const std::string& stats_prefix, Server::Configuration::FactoryContext& context) override;
@@ -28,8 +29,6 @@ public:
   void translateHttpAdaptFilter(const Json::Object& json_config, 
                                 envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config);
   
-  std::string name() override { return "adapt-filter"; }
-
    /*Router::RouteSpecificFilterConfigConstSharedPtr createRouteSpecificFilterConfigTyped(
        const envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config,
        Server::Configuration::FactoryContext& context) override;
