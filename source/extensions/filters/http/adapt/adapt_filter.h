@@ -6,7 +6,8 @@
 #include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
 
-#include "extensions/filters/http/fault/fault_filter.h" // StreamRateLimiter
+//#include "extensions/filters/http/fault/fault_filter.h" // StreamRateLimiter
+#include "extensions/filters/http/adapt/rate_limiter.h"
 
 #include "common/buffer/buffer_impl.h"
 #include "common/common/logger.h"
@@ -103,8 +104,9 @@ private:
   ConfigSharedPtr config_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
-  std::unique_ptr<Fault::StreamRateLimiter> response_limiter_;
-  std::unique_ptr<Fault::StreamRateLimiter> request_limiter_; 
+  std::unique_ptr<AdaptRateLimiter> response_limiter_;
+  std::unique_ptr<AdaptRateLimiter> request_limiter_; 
+  Buffer::OwnedImpl buffer_;
 };
 
 } // namespace AdaptFilter

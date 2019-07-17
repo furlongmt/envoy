@@ -33,6 +33,8 @@ public:
    */
   virtual std::chrono::milliseconds nextTokenAvailable() PURE;
 
+  virtual std::chrono::milliseconds allTokensAvailable(uint64_t tokens_needed) PURE;
+
   virtual void reset(uint64_t num_tokens) PURE;
 };
 

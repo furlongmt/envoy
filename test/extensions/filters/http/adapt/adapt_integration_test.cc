@@ -25,7 +25,7 @@ TEST_P(AdaptIntegrationTest, Test1) {
   codec_client = makeHttpConnection(lookupPort("http"));
   auto r = codec_client->startRequest(default_request_headers_);
 
-  Buffer::OwnedImpl d(std::string(50, 'b'));
+  Buffer::OwnedImpl d(std::string(51, 'b'));
   r.first.encodeData(d, true); // for some reason simulated time doesn't seem to work here as the queue just goes...
   waitForNextUpstreamRequest();
   
@@ -35,12 +35,12 @@ TEST_P(AdaptIntegrationTest, Test1) {
   EXPECT_EQ(0UL, test_server_->gauge("http.config_test.adapt.response_queue_size")->value());
   //EXPECT_EQ(127UL, test_server_->gauge("http.config_test.adapt.request_queue_size")->value());
 
+  // Wait for a tick worth of data and end stream
+  simTime().sleep(std::chrono::milliseconds(100));
   // Wait for a tick worth of data
-  r.second->waitForBodyData(64);
+  //r.second->waitForBodyData(64);
   EXPECT_EQ(63UL, test_server_->gauge("http.config_test.adapt.response_queue_size")->value()); 
 
-  // Wait for a tick worth of data and end stream
-  simTime().sleep(std::chrono::milliseconds(63));
   r.second->waitForBodyData(127);
   r.second->waitForEndStream();
 

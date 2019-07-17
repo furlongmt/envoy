@@ -23,6 +23,7 @@ public:
   // TokenBucket
   uint64_t consume(uint64_t tokens, bool allow_partial) override;
   std::chrono::milliseconds nextTokenAvailable() override;
+  std::chrono::milliseconds allTokensAvailable(uint64_t tokens_needed) override;
   void reset(uint64_t num_tokens) override;
 
 private:
