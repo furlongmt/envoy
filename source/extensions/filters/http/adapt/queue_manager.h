@@ -26,12 +26,16 @@ public:
     Http::StreamEncoderFilterCallbacks* encoder_callbacks() { return encoder_callbacks_; }
     Http::StreamDecoderFilterCallbacks* decoder_callbacks() { return decoder_callbacks_; }
     uint64_t size() { return size_; }
+    bool adapted() { return adapted_; }
+
+    void set_adapted(bool adapted) { adapted_ = adapted; }
 
 private:
     Event::Dispatcher& dispatcher_;
     Http::StreamEncoderFilterCallbacks* encoder_callbacks_;
     Http::StreamDecoderFilterCallbacks* decoder_callbacks_;
     uint64_t size_;
+    bool adapted_{}; // TODO: this shouldn't be a bool as there's levels of adaption
 };
 
 using RequestSharedPtr = std::shared_ptr<Request>;
@@ -67,14 +71,12 @@ private:
 
   const uint64_t DecodeBytesThreshold = 1000;
   const uint64_t EncodeBytesThreshold = 1000;
-  bool transform_encoded_q_{};
-  bool transform_decoded_q_{};
 
   RealTimeSource time_source_;
   uint64_t bytes_per_time_slice_;
   std::mutex mtx_;
-
   uint64_t max_kbps_ = 1; // TODO: create configurable max_kbps and different kbps for encode/decode
+
   bool decode_saw_data_{};
   bool encode_saw_data_{};
   uint64_t bytes_in_encode_q_;
