@@ -218,6 +218,11 @@ private:
       ASSERT(parent_.state_.latest_data_decoding_filter_ == this);
       callback(*parent_.buffered_request_data_.get());
     }
+    // MATT F ADDED THIS
+    void modifyDecodingHeaders(std::function<void(Http::HeaderMap&)> callback) override {
+      ASSERT(parent_.state_.latest_data_decoding_filter_ == this);
+      callback(*parent_.request_headers_.get());
+    }
 
     void sendLocalReply(Code code, absl::string_view body,
                         std::function<void(HeaderMap& headers)> modify_headers,
@@ -304,6 +309,11 @@ private:
     void modifyEncodingBuffer(std::function<void(Buffer::Instance&)> callback) override {
       ASSERT(parent_.state_.latest_data_encoding_filter_ == this);
       callback(*parent_.buffered_response_data_.get());
+    }
+    // MATT F ADDED THIS
+    void modifyEncodingHeaders(std::function<void(Http::HeaderMap&)> callback) override {
+      ASSERT(parent_.state_.latest_data_encoding_filter_ == this);
+      callback(*parent_.response_headers_.get());
     }
 
     void responseDataTooLarge();

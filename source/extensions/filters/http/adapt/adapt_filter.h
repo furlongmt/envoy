@@ -7,7 +7,7 @@
 #include "envoy/stats/stats_macros.h"
 
 //#include "extensions/filters/http/fault/fault_filter.h" // StreamRateLimiter
-#include "extensions/filters/http/adapt/rate_limiter.h"
+#include "extensions/filters/http/adapt/queue_manager.h"
 
 #include "common/buffer/buffer_impl.h"
 #include "common/common/logger.h"
@@ -82,6 +82,7 @@ public:
   void setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbacks& callbacks) override {
     decoder_callbacks_ = &callbacks;
   }
+  void decodeComplete() override;
 
   // Http::StreamEncoderFilter
   Http::FilterHeadersStatus encode100ContinueHeaders(Http::HeaderMap&) override {
@@ -96,17 +97,16 @@ public:
   void setEncoderFilterCallbacks(Http::StreamEncoderFilterCallbacks& callbacks) override {
     encoder_callbacks_ = &callbacks;
   }
-  //void encodeComplete() override;
-
-  void printStuff(uint64_t bytes);
+  void encodeComplete() override;
 
 private:
   ConfigSharedPtr config_;
+  uint64_t encode_buffer_len_;
+  uint64_t decode_buffer_len_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
-  std::unique_ptr<AdaptRateLimiter> response_limiter_;
-  std::unique_ptr<AdaptRateLimiter> request_limiter_; 
-  Buffer::OwnedImpl buffer_;
+  //std::unique_ptr<AdaptRateLimiter> response_limiter_;
+  //std::unique_ptr<AdaptRateLimiter> request_limiter_; 
 };
 
 } // namespace AdaptFilter

@@ -5,6 +5,9 @@
 
 #include "common/common/assert.h"
 
+#define DECODE
+#define ENCODE
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -30,108 +33,79 @@ InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& 
 
 Adapt::Adapt(ConfigSharedPtr config) : config_(config) {
   ENVOY_LOG(critical, "Beginning adapt object creation.");
+  encode_buffer_len_ = 0;
+  decode_buffer_len_ = 0;
 }
 
 Adapt::~Adapt() {
   ENVOY_LOG(critical, "Cleaning up adapt filter...");
-  ASSERT(response_limiter_ == nullptr || response_limiter_->destroyed());
-  ASSERT(request_limiter_ == nullptr || request_limiter_->destroyed());
 }
 
 void Adapt::onDestroy() {
-  if (response_limiter_ != nullptr) {
-    response_limiter_->destroy();
-  }
-  if(request_limiter_ != nullptr) {
-    request_limiter_->destroy();
-  }
 }
 
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap&, bool) {
-
-  if (request_limiter_ == nullptr) {
-    const uint64_t kbps_rate = config_->settings()->get_limit_kbps();
-    request_limiter_ = std::make_unique<AdaptRateLimiter>(
-        kbps_rate, decoder_callbacks_->decoderBufferLimit(),
-        [this](Buffer::Instance& data, bool end_stream) {
-          ENVOY_LOG(critical, "Request limiter injection {} bytes.", data.length());
-          config_->stats().request_queue_size_.sub(data.length());
-          decoder_callbacks_->injectDecodedDataToFilterChain(data, end_stream);
-        },
-        [this] { decoder_callbacks_->continueDecoding(); }, config_->timeSource(),
-        decoder_callbacks_->dispatcher());
-    ENVOY_LOG(critical, "Configured request limiter with a rate limit of {} kbps.", kbps_rate);
-    ENVOY_LOG(critical, "Time source is {}", typeid(config_->timeSource()).name());
-  }
-
+#ifdef DECODE 
+  return Http::FilterHeadersStatus::StopIteration;
+#else
   return Http::FilterHeadersStatus::Continue;
+#endif
 }
 
-Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool end_stream) {
-
+Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool) {
+#ifdef DECODE
   ENVOY_LOG(critical, "Writing {} bytes to buffer.", data.length());
-  buffer_.move(data);
-
-  if (end_stream) {
-    assert(request_limiter_ != nullptr);
-    config_->stats().request_queue_size_.add(buffer_.length());
-    ENVOY_LOG(critical, "Writing {} bytes to rate_limiter in decode.", buffer_.length());
-    request_limiter_->writeData(buffer_);
-  }
-  
-  return Http::FilterDataStatus::StopIterationNoBuffer;
+  decode_buffer_len_ += data.length();
+  return Http::FilterDataStatus::StopIterationAndBuffer;
+#else
+  ENVOY_LOG(critical, "Continuing in decode data...", data.length());
+  return Http::FilterDataStatus::Continue;
+#endif
 }
 
 // TODO
 Http::FilterTrailersStatus Adapt::decodeTrailers(Http::HeaderMap&) {
-  if (request_limiter_ != nullptr) {
-    return request_limiter_->onTrailers();
-  }
   return Http::FilterTrailersStatus::Continue;
 }
 
-Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap&, bool) {
-  if (response_limiter_ == nullptr) {
-    const uint64_t kbps_rate = config_->settings()->get_limit_kbps();
-    response_limiter_ = std::make_unique<AdaptRateLimiter>(
-        kbps_rate, encoder_callbacks_->encoderBufferLimit(),
-        [this](Buffer::Instance& data, bool end_stream) {
-          config_->stats().response_queue_size_.sub(data.length());
-          ENVOY_LOG(critical, "Response limiter injection {} bytes.", data.length());
-          encoder_callbacks_->injectEncodedDataToFilterChain(data, end_stream);
-        },
-        [this] { encoder_callbacks_->continueEncoding(); }, config_->timeSource(),
-        encoder_callbacks_->dispatcher());
-    ENVOY_LOG(critical, "Configured response limiter with a rate limit of {} kbps.", kbps_rate);
-  }
-  return Http::FilterHeadersStatus::Continue;
+void Adapt::decodeComplete() {
+#ifdef DECODE
+  ENVOY_LOG(critical, "Decoding complete, inserting {} bytes into queue", decode_buffer_len_); 
+  QueueManager::Instance().addDecoderToQueue(decoder_callbacks_, decode_buffer_len_);
+#endif
 }
 
-Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool end_stream) {
+Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap& headers, bool) {
+#ifdef ENCODE
+  ENVOY_LOG(critical, "Stop iterating when encoding headers {}", headers);
+  return Http::FilterHeadersStatus::StopIteration;
+#else
+  return Http::FilterHeadersStatus::Continue;
+#endif
+}
 
+Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool) {
+#ifdef ENCODE
   ENVOY_LOG(critical, "Writing {} bytes to buffer in encode.", data.length());
-  buffer_.move(data);
-
-  if (end_stream) {
-    assert(response_limiter_ != nullptr);
-    config_->stats().response_queue_size_.add(buffer_.length());
-    ENVOY_LOG(critical, "Writing {} bytes to rate_limiter in encode.", buffer_.length());
-    response_limiter_->writeData(buffer_);
-  }
-
-  return Http::FilterDataStatus::StopIterationNoBuffer;
+  encode_buffer_len_ += data.length();
+  return Http::FilterDataStatus::StopIterationAndBuffer;
+#else
+  ENVOY_LOG(critical, "Continuing in encode data...", data.length());
+  return Http::FilterDataStatus::Continue;
+#endif
 }
 
 // TODO
 Http::FilterTrailersStatus Adapt::encodeTrailers(Http::HeaderMap&) {
-  if (response_limiter_ != nullptr) {
-    return response_limiter_->onTrailers();
-  }
-
   return Http::FilterTrailersStatus::Continue;
 }
 
-void Adapt::printStuff(uint64_t bytes) { ENVOY_LOG(critical, "IT WORKED, bytes = {}", bytes); }
+void Adapt::encodeComplete() {
+#ifdef ENCODE
+  ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_); 
+  QueueManager::Instance().addEncoderToQueue(encoder_callbacks_, encode_buffer_len_);
+#endif
+}
 
 } // namespace AdaptFilter
 } // namespace HttpFilters

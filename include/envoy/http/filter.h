@@ -218,6 +218,9 @@ public:
    */
   virtual void modifyDecodingBuffer(std::function<void(Buffer::Instance&)> callback) PURE;
 
+  // MATT F ADDED THIS
+  virtual void modifyDecodingHeaders(std::function<void(Http::HeaderMap&)> callback) PURE;
+
   /**
    * Add buffered body data. This method is used in advanced cases where returning
    * StopIterationAndBuffer from decodeData() is not sufficient.
@@ -497,6 +500,9 @@ public:
    */
   virtual void modifyEncodingBuffer(std::function<void(Buffer::Instance&)> callback) PURE;
 
+  // MATT F ADDED THIS
+  virtual void modifyEncodingHeaders(std::function<void(Http::HeaderMap&)> callback) PURE;
+  
   /**
    * Add buffered body data. This method is used in advanced cases where returning
    * StopIterationAndBuffer from encodeData() is not sufficient.

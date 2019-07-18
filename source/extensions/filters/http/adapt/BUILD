@@ -11,9 +11,9 @@ load(
 envoy_package()
 
 envoy_cc_library(
-    name = "adapt_rate_limiter_lib",
-    srcs = ["rate_limiter.cc"],
-    hdrs = ["rate_limiter.h"],
+    name = "queue_manager_lib",
+    srcs = ["queue_manager.cc"],
+    hdrs = ["queue_manager.h"],
     deps = [
         "//include/envoy/event:timer_interface",
         "//include/envoy/http:codes_interface",
@@ -42,7 +42,7 @@ envoy_cc_library(
         "//include/envoy/stats:stats_interface",
         "//include/envoy/stats:stats_macros",
         #"//source/extensions/filters/http/fault:fault_filter_lib",
-        "//source/extensions/filters/http/adapt:adapt_rate_limiter_lib",
+        "//source/extensions/filters/http/adapt:queue_manager_lib",
     ],
 )
 

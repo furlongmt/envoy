@@ -318,6 +318,9 @@ private:
   void modifyDecodingBuffer(std::function<void(Buffer::Instance&)>) override {
     NOT_IMPLEMENTED_GCOVR_EXCL_LINE;
   }
+  void modifyDecodingHeaders(std::function<void(Http::HeaderMap&)>) override {
+    NOT_IMPLEMENTED_GCOVR_EXCL_LINE;
+  }
   void sendLocalReply(Code code, absl::string_view body,
                       std::function<void(HeaderMap& headers)> modify_headers,
                       const absl::optional<Grpc::Status::GrpcStatus> grpc_status) override {
