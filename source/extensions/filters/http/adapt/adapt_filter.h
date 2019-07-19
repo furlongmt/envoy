@@ -105,6 +105,8 @@ private:
   uint64_t decode_buffer_len_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
+  bool encode_headers_only_;
+  bool decode_headers_only_;
   //std::unique_ptr<AdaptRateLimiter> response_limiter_;
   //std::unique_ptr<AdaptRateLimiter> request_limiter_; 
 };

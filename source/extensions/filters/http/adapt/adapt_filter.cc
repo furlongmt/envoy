@@ -31,21 +31,31 @@ InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& 
                           POOL_GAUGE_PREFIX(scope, final_prefix))};
 }
 
-Adapt::Adapt(ConfigSharedPtr config) : config_(config) {
-  ENVOY_LOG(critical, "Beginning adapt object creation.");
-  encode_buffer_len_ = 0;
-  decode_buffer_len_ = 0;
+Adapt::Adapt(ConfigSharedPtr config) : config_(config), encode_buffer_len_(0), decode_buffer_len_(0) {
+  //ENVOY_LOG(critical, "Beginning adapt object creation.");
 }
 
 Adapt::~Adapt() {
-  ENVOY_LOG(critical, "Cleaning up adapt filter...");
+  //ENVOY_LOG(critical, "Cleaning up adapt filter...");
 }
 
+// TODO: this may be a bit hacky...
+// When the filter is destroyed, we know that the request has left the queue
 void Adapt::onDestroy() {
+#ifdef DECODE
+  config_->stats().request_queue_size_.sub(decode_buffer_len_);
+#endif
+#ifdef ENCODE
+  config_->stats().response_queue_size_.sub(encode_buffer_len_);
+#endif
 }
 
-Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap&, bool) {
+// TODO: we probably want to buffer headers and payload...
+Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
+  decode_headers_only_ = end_stream;
 #ifdef DECODE 
+  decode_buffer_len_ += headers.size();
+  //ENVOY_LOG(critical, "Stop iterating when decoding headers {}, end_stream={}", headers, end_stream);
   return Http::FilterHeadersStatus::StopIteration;
 #else
   return Http::FilterHeadersStatus::Continue;
@@ -65,19 +75,23 @@ Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool) {
 
 // TODO
 Http::FilterTrailersStatus Adapt::decodeTrailers(Http::HeaderMap&) {
-  return Http::FilterTrailersStatus::Continue;
+  return Http::FilterTrailersStatus::StopIteration;
 }
 
 void Adapt::decodeComplete() {
 #ifdef DECODE
-  ENVOY_LOG(critical, "Decoding complete, inserting {} bytes into queue", decode_buffer_len_); 
-  QueueManager::Instance().addDecoderToQueue(decoder_callbacks_, decode_buffer_len_);
+    ENVOY_LOG(critical, "Decoding complete, inserting {} bytes into queue", decode_buffer_len_);
+    config_->stats().request_queue_size_.add(decode_buffer_len_);
+    QueueManager::Instance().addDecoderToQueue(decoder_callbacks_, decode_buffer_len_,
+                                               decode_headers_only_);
 #endif
 }
 
-Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap& headers, bool) {
+Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap& headers, bool end_stream) {
+  encode_headers_only_ = end_stream;
 #ifdef ENCODE
-  ENVOY_LOG(critical, "Stop iterating when encoding headers {}", headers);
+  encode_buffer_len_ += headers.size();
+  //ENVOY_LOG(critical, "Stop iterating when encoding headers {}", headers);
   return Http::FilterHeadersStatus::StopIteration;
 #else
   return Http::FilterHeadersStatus::Continue;
@@ -97,13 +111,14 @@ Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool) {
 
 // TODO
 Http::FilterTrailersStatus Adapt::encodeTrailers(Http::HeaderMap&) {
-  return Http::FilterTrailersStatus::Continue;
+  return Http::FilterTrailersStatus::StopIteration;
 }
 
 void Adapt::encodeComplete() {
 #ifdef ENCODE
-  ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_); 
-  QueueManager::Instance().addEncoderToQueue(encoder_callbacks_, encode_buffer_len_);
+  config_->stats().response_queue_size_.add(encode_buffer_len_);
+  ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_);
+  QueueManager::Instance().addEncoderToQueue(encoder_callbacks_, encode_buffer_len_, encode_headers_only_);
 #endif
 }
 

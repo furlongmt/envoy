@@ -14,28 +14,34 @@ namespace AdaptFilter {
 
 class Request {
 public:
-    Request(Event::Dispatcher& dispatcher, 
-        Http::StreamEncoderFilterCallbacks *encoder_callbacks, uint64_t size) : 
-            dispatcher_(dispatcher), encoder_callbacks_(encoder_callbacks), size_(size){}
-    
-    Request(Event::Dispatcher& dispatcher, 
-        Http::StreamDecoderFilterCallbacks *decoder_callbacks, uint64_t size) : 
-            dispatcher_(dispatcher), decoder_callbacks_(decoder_callbacks), size_(size){}
+  Request(Event::Dispatcher& dispatcher, Http::StreamEncoderFilterCallbacks* encoder_callbacks,
+          uint64_t size, bool headers_only)
+      : dispatcher_(dispatcher), encoder_callbacks_(encoder_callbacks), size_(size),
+        headers_only_(headers_only) {}
 
-    Event::Dispatcher& dispatcher() { return dispatcher_; };
-    Http::StreamEncoderFilterCallbacks* encoder_callbacks() { return encoder_callbacks_; }
-    Http::StreamDecoderFilterCallbacks* decoder_callbacks() { return decoder_callbacks_; }
-    uint64_t size() { return size_; }
-    bool adapted() { return adapted_; }
+  Request(Event::Dispatcher& dispatcher, Http::StreamDecoderFilterCallbacks* decoder_callbacks,
+          uint64_t size, bool headers_only)
+      : dispatcher_(dispatcher), decoder_callbacks_(decoder_callbacks), size_(size),
+        headers_only_(headers_only) {}
 
-    void set_adapted(bool adapted) { adapted_ = adapted; }
+  Event::Dispatcher& dispatcher() { return dispatcher_; };
+  Http::StreamEncoderFilterCallbacks* encoder_callbacks() { return encoder_callbacks_; }
+  Http::StreamDecoderFilterCallbacks* decoder_callbacks() { return decoder_callbacks_; }
+  uint64_t size() { return size_; }
+  bool headers_only() { return headers_only_; }
+  bool adapted() {
+    return adapted_ || headers_only_;
+  } // TODO: this isn't correct as sometimes we may want to adapt just request headers perhaps?
+
+  void set_adapted(bool adapted) { adapted_ = adapted; }
 
 private:
-    Event::Dispatcher& dispatcher_;
-    Http::StreamEncoderFilterCallbacks* encoder_callbacks_;
-    Http::StreamDecoderFilterCallbacks* decoder_callbacks_;
-    uint64_t size_;
-    bool adapted_{}; // TODO: this shouldn't be a bool as there's levels of adaption
+  Event::Dispatcher& dispatcher_;
+  Http::StreamEncoderFilterCallbacks* encoder_callbacks_;
+  Http::StreamDecoderFilterCallbacks* decoder_callbacks_;
+  uint64_t size_;
+  bool headers_only_; // specifies if request is headers only
+  bool adapted_{};    // TODO: this shouldn't be a bool as there's levels of adaption
 };
 
 using RequestSharedPtr = std::shared_ptr<Request>;
@@ -47,15 +53,16 @@ public:
     return instance;
   }
 
-  void addEncoderToQueue(Http::StreamEncoderFilterCallbacks *callbacks, uint64_t size);
-  void addDecoderToQueue(Http::StreamDecoderFilterCallbacks *callbacks, uint64_t size);
+  void addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
+                         bool headers_only);
+  void addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
+                         bool headers_only);
 
 protected:
   QueueManager();
-  ~QueueManager() {};
+  ~QueueManager(){};
 
 private:
-
   std::chrono::milliseconds check_encode_queue_for_removal();
   std::chrono::milliseconds check_decode_queue_for_removal();
   void transform_encoder_queue(std::function<void(Buffer::Instance&)> buf_func,
@@ -84,7 +91,7 @@ private:
   TokenBucketImpl encode_token_bucket_;
   TokenBucketImpl decode_token_bucket_;
   std::list<RequestSharedPtr> decode_q_;
-  std::list<RequestSharedPtr> encode_q_; 
+  std::list<RequestSharedPtr> encode_q_;
 };
 
 } // namespace AdaptFilter

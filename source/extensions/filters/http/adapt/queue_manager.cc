@@ -35,7 +35,7 @@ std::chrono::milliseconds QueueManager::check_decode_queue_for_removal() {
 
   // TODO: set threshold and only transform queue once
   if (bytes_in_decode_q_ > DecodeBytesThreshold) {
-    const absl::string_view s("\n transformation in request");
+    const absl::string_view s("\n transformation on request");
     std::function<void(Http::HeaderMap&)> header_f = [s](Http::HeaderMap& headers) {
       int str_len = s.length();
       int prev_content_length =
@@ -44,7 +44,7 @@ std::chrono::milliseconds QueueManager::check_decode_queue_for_removal() {
     };
     std::function<void(Buffer::Instance&)> buf_f = [s](Buffer::Instance& buf) { buf.add(s); };
     transform_decoder_queue(buf_f, header_f);
-  } 
+  }
 
   // TODO: what should this time be?
   if (decode_q_.empty()) {
@@ -61,18 +61,19 @@ std::chrono::milliseconds QueueManager::check_decode_queue_for_removal() {
 
   Buffer::OwnedImpl data_to_write;
   uint64_t tokens_needed = 0;
-  uint64_t request_size = decode_q_.front()->size();
+  RequestSharedPtr req = decode_q_.front();
+  uint64_t request_size = req->size();
 
   ENVOY_LOG(critical, "limiter: request size = {}", request_size);
 
   tokens_needed = (request_size + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
   const uint64_t tokens_obtained = decode_token_bucket_.consume(tokens_needed, false);
 
-  if (tokens_obtained != 0 || request_size == 0) { // this is to handle header only requests
+  if (tokens_obtained != 0 || req->headers_only()) {
     ENVOY_LOG(critical, "limiter: tokens_needed={} tokens_obtained={}", tokens_needed,
               tokens_obtained);
 
-    Http::StreamDecoderFilterCallbacks* cb = decode_q_.front()->decoder_callbacks();
+    Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
     ASSERT(cb != nullptr);
     decode_q_.front()->dispatcher().post(
         [cb] { cb->continueDecoding(); }); // allow the filter to continue passing data
@@ -92,7 +93,7 @@ std::chrono::milliseconds QueueManager::check_encode_queue_for_removal() {
   std::lock_guard<std::mutex> lck(mtx_);
 
   if (bytes_in_encode_q_ > EncodeBytesThreshold) {
-    const absl::string_view s("\n transformation in response");
+    const absl::string_view s("\n transformation on response");
     std::function<void(Http::HeaderMap&)> header_f = [s](Http::HeaderMap& headers) {
       int str_len = s.length();
       int prev_content_length =
@@ -101,7 +102,7 @@ std::chrono::milliseconds QueueManager::check_encode_queue_for_removal() {
     };
     std::function<void(Buffer::Instance&)> buf_f = [s](Buffer::Instance& buf) { buf.add(s); };
     transform_encoder_queue(buf_f, header_f);
-  } 
+  }
 
   // TODO: what should this time returned be?
   if (encode_q_.empty()) {
@@ -145,16 +146,20 @@ std::chrono::milliseconds QueueManager::check_encode_queue_for_removal() {
   return encode_token_bucket_.allTokensAvailable(tokens_needed);
 }
 
-void QueueManager::addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size) {
+void QueueManager::addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
+                                     bool headers_only) {
   std::lock_guard<std::mutex> lck(mtx_);
-  RequestSharedPtr req = std::make_shared<Request>(callbacks->dispatcher(), callbacks, size);
+  RequestSharedPtr req =
+      std::make_shared<Request>(callbacks->dispatcher(), callbacks, size, headers_only);
   encode_q_.push_back(req);
   bytes_in_encode_q_ += size;
 }
 
-void QueueManager::addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size) {
+void QueueManager::addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
+                                     bool headers_only) {
   std::lock_guard<std::mutex> lck(mtx_);
-  RequestSharedPtr req = std::make_shared<Request>(callbacks->dispatcher(), callbacks, size);
+  RequestSharedPtr req =
+      std::make_shared<Request>(callbacks->dispatcher(), callbacks, size, headers_only);
   decode_q_.push_back(req);
   bytes_in_decode_q_ += size;
 }
@@ -163,6 +168,7 @@ void QueueManager::addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbac
 void QueueManager::transform_encoder_queue(std::function<void(Buffer::Instance&)> buf_func,
                                            std::function<void(Http::HeaderMap&)> header_func) {
   ENVOY_LOG(critical, "Running transformation on encoder queue!");
+  uint64_t adapted_reqs = 0, already_adapted_reqs = 0;
   for (RequestSharedPtr req : encode_q_) {
     if (!req->adapted()) {
       Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
@@ -170,18 +176,22 @@ void QueueManager::transform_encoder_queue(std::function<void(Buffer::Instance&)
       // we also need to modify headers sometimes (e.g. content-length)
       cb->modifyEncodingHeaders(header_func);
       req->set_adapted(true);
+      adapted_reqs++;
+    } else {
+      already_adapted_reqs++;
     }
-    /* req->dispatcher().post([cb, func] {
-      cb->modifyDecodingBuffer(func);
-    }); */ // allow the filter to continue passing data
   }
-  ENVOY_LOG(critical, "Finished encoder queue transformation!");
+  ENVOY_LOG(critical,
+            "Finished encoder queue transformation, {} total requests in queue, {} already "
+            "adapted, {} just adapted!",
+            already_adapted_reqs + adapted_reqs, already_adapted_reqs, adapted_reqs);
 }
 
 // Note: You should always be holding the queues mutex when calling this function
 void QueueManager::transform_decoder_queue(std::function<void(Buffer::Instance&)> buf_func,
                                            std::function<void(Http::HeaderMap&)> header_func) {
   ENVOY_LOG(critical, "Running transformation on decoder queue!");
+  uint64_t adapted_reqs = 0, already_adapted_reqs = 0;
   // TODO: this is way too slow.... O(n)
   for (RequestSharedPtr req : decode_q_) {
     if (!req->adapted()) {
@@ -189,12 +199,15 @@ void QueueManager::transform_decoder_queue(std::function<void(Buffer::Instance&)
       cb->modifyDecodingBuffer(buf_func);
       cb->modifyDecodingHeaders(header_func);
       req->set_adapted(true);
+      adapted_reqs++;
+    } else {
+      already_adapted_reqs++;
     }
-    /* req->dispatcher().post([cb, func] {
-      cb->modifyDecodingBuffer(func);
-    }); */ // allow the filter to continue passing data
   }
-  ENVOY_LOG(critical, "Finished decoder queue transformation!");
+  ENVOY_LOG(critical,
+            "Finished decoder queue transformation, {} total requests in queue, {} already "
+            "adapted, {} just adapted!",
+            already_adapted_reqs + adapted_reqs, already_adapted_reqs, adapted_reqs);
 }
 
 } // namespace AdaptFilter
