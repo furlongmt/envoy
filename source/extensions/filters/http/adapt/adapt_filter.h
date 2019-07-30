@@ -107,8 +107,8 @@ private:
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
   bool encode_headers_only_;
   bool decode_headers_only_;
-  //std::unique_ptr<AdaptRateLimiter> response_limiter_;
-  //std::unique_ptr<AdaptRateLimiter> request_limiter_; 
+  Http::HeaderMap* encode_headers_;
+  Http::HeaderMap* decode_headers_;
 };
 
 } // namespace AdaptFilter

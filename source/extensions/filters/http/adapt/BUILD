@@ -11,9 +11,9 @@ load(
 envoy_package()
 
 envoy_cc_library(
-    name = "queue_manager_lib",
-    srcs = ["queue_manager.cc"],
-    hdrs = ["queue_manager.h"],
+    name = "queue_lib",
+    srcs = ["queue.cc"],
+    hdrs = ["queue.h", "request.h"],
     deps = [
         "//include/envoy/event:timer_interface",
         "//include/envoy/http:codes_interface",
@@ -34,6 +34,15 @@ envoy_cc_library(
 )
 
 envoy_cc_library(
+    name = "queue_manager_lib",
+    srcs = ["queue_manager.cc"],
+    hdrs = ["queue_manager.h"],
+    deps = [
+        "//source/extensions/filters/http/adapt:queue_lib",
+    ],
+)
+
+envoy_cc_library(
     name = "adapt_filter_lib",
     srcs = ["adapt_filter.cc"],
     hdrs = ["adapt_filter.h"],
@@ -41,7 +50,6 @@ envoy_cc_library(
         "@envoy_api//envoy/config/filter/http/adapt/v2:adapt_cc",
         "//include/envoy/stats:stats_interface",
         "//include/envoy/stats:stats_macros",
-        #"//source/extensions/filters/http/fault:fault_filter_lib",
         "//source/extensions/filters/http/adapt:queue_manager_lib",
     ],
 )
