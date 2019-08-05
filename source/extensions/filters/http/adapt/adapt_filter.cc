@@ -6,7 +6,7 @@
 #include "common/common/assert.h"
 
 #define DECODE
-//#define ENCODE
+#define ENCODE
 
 namespace Envoy {
 namespace Extensions {
@@ -14,8 +14,8 @@ namespace HttpFilters {
 namespace AdaptFilter {
 
 AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config) {
-  limit_kbps = config.limit_kbps();
-  QueueManager::Instance().setDecodeMaxKbps(limit_kbps);
+  QueueManager::Instance().setDecodeMaxKbps(config.decode_limit_kbps());
+  QueueManager::Instance().setEncodeMaxKbps(config.encode_limit_kbps());
 }
 
 AdaptConfig::AdaptConfig(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
@@ -56,7 +56,7 @@ Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool en
   decode_headers_only_ = end_stream;
   decode_headers_ = &headers;
   decode_buffer_len_ += headers.size();
-  ENVOY_LOG(trace, "Stop iterating when decoding headers {}, end_stream={}", headers,
+  ENVOY_LOG(critical, "Stop iterating when decoding headers {}, end_stream={}", headers,
         end_stream);
   return Http::FilterHeadersStatus::StopIteration;
 }
@@ -98,7 +98,7 @@ Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap& headers, bool en
   encode_headers_only_ = end_stream;
   encode_headers_ = &headers;
   encode_buffer_len_ += headers.size();
-  // ENVOY_LOG(critical, "Stop iterating when encoding headers {}", headers);
+  ENVOY_LOG(critical, "Stop iterating when encoding headers {}", headers);
   return Http::FilterHeadersStatus::StopIteration;
 }
 #else
@@ -116,8 +116,8 @@ Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool) {
 #else
 Http::FilterDataStatus Adapt::encodeData(Buffer::Instance&, bool) {
   return Http::FilterDataStatus::Continue;
-#endif
 }
+#endif
 
 // TODO
 Http::FilterTrailersStatus Adapt::encodeTrailers(Http::HeaderMap&) {

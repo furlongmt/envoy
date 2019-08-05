@@ -81,6 +81,7 @@ public:
   Http::FilterTrailersStatus decodeTrailers(Http::HeaderMap&) override;
   void setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbacks& callbacks) override {
     decoder_callbacks_ = &callbacks;
+    decoder_callbacks_->setDecoderBufferLimit(0); // Setting buffer limit to 0 means there's no limit
   }
   void decodeComplete() override;
 
@@ -96,6 +97,7 @@ public:
   }
   void setEncoderFilterCallbacks(Http::StreamEncoderFilterCallbacks& callbacks) override {
     encoder_callbacks_ = &callbacks;
+    encoder_callbacks_->setEncoderBufferLimit(0); // Setting buffer limit to 0 means there's no limit
   }
   void encodeComplete() override;
 

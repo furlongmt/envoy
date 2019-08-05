@@ -12,6 +12,7 @@ import "gogoproto/gogo.proto";
 
 message AdaptRateLimit {
   // The limit supplied in queue length
-  uint64 limit_kbps = 1 [(validate.rules).uint64.gte = 1];
+  uint64 decode_limit_kbps = 1 [(validate.rules).uint64.gte = 1];
+  uint64 encode_limit_kbps = 2 [(validate.rules).uint64.gte = 1];
   //uint64 queue_length = 1 [(validate.rules).uint64.gte = 1];
 }

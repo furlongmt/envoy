@@ -20,7 +20,6 @@ void Queue::SetMaxKbps(uint64_t max_kbps) {
   if (max_kbps != max_kbps_) {
     max_kbps_ = max_kbps;
     bytes_per_time_slice_ = ((max_kbps_ * 1024) / SecondDivisor);
-    ENVOY_LOG(critical, "Updated max kbps to {}", max_kbps_);
   }
 }
 
@@ -63,7 +62,7 @@ std::chrono::milliseconds Queue::drain_request() {
     transform(buf_f, header_f);
   }
 
-  // TODO: don't hardcode decode bytes threshold * 100
+  // TODO: don't hardcode bytes threshold * 100
   if (drop_ && bytes_in_q_ > BytesThreshold * 400) {
       //drop_every_nth_request(decode_q_, decode_adapt_set_, 2);
       drop_large_messages(200000);

@@ -28,8 +28,11 @@ Http::FilterFactoryCb AdaptFilterFactory::createFilterFactoryFromProtoTyped(
 void AdaptFilterFactory::translateHttpAdaptFilter(
     const Json::Object& json_config,
     envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config) {
-  if ((json_config).hasObject("limit_kbps")) {
-    (proto_config).set_limit_kbps(json_config.getInteger("limit_kbps"));
+  if ((json_config).hasObject("encode_limit_kbps")) {
+    (proto_config).set_encode_limit_kbps(json_config.getInteger("encode_limit_kbps"));
+  }
+  if ((json_config).hasObject("decode_limit_kbps")) {
+    (proto_config).set_decode_limit_kbps(json_config.getInteger("decode_limit_kbps"));
   }
 }
 

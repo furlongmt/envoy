@@ -30,6 +30,12 @@ QueueManager::QueueManager() : encode_q_(true, false, false), decode_q_(false, t
 
 void QueueManager::setDecodeMaxKbps(uint64_t max_kbps) {
   decode_q_.SetMaxKbps(max_kbps);
+  ENVOY_LOG(critical, "Updated decode max kbps to {}", max_kbps);
+}
+
+void QueueManager::setEncodeMaxKbps(uint64_t max_kbps) {
+  encode_q_.SetMaxKbps(max_kbps);
+  ENVOY_LOG(critical, "Updated encode max kbps to {}", max_kbps);
 }
 
 void QueueManager::addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,

@@ -24,6 +24,7 @@ public:
   }
 
   void setDecodeMaxKbps(uint64_t max_kbps);
+  void setEncodeMaxKbps(uint64_t max_kbps);
 
   void addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
                          bool headers_only, const Http::HeaderMap& headers);
