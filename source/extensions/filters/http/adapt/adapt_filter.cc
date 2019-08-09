@@ -62,7 +62,7 @@ void Adapt::onDestroy() {
   std::chrono::duration<double, std::milli> encode_time_span = encode_entered_tp_ - std::chrono::system_clock::now();
   if (encode_time_span.count() < deadline_) {
     // TODO: this is wrong in the case where we drop messages
-    config_->stats().response_bytes_made_dl_.add(encoder_callbacks_->streamInfo().bytesSent());
+    config_->stats().response_bytes_made_dl_.add(encode_buffer_len_);
   }
 #endif
   ENVOY_LOG(trace, "Adapt filter onDestroy()");
