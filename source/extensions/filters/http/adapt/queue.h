@@ -60,14 +60,14 @@ private:
    * This struct should ideally match the parameters that we provide via
    * our drop config api. Currently this is just a value and queue_length threshold.
    */
-  struct Dropper {
-    Dropper(uint64_t val, uint64_t thresh) : value(val), threshold(thresh) {}
+  struct DropperConfig {
+    DropperConfig(uint64_t val, uint64_t thresh) : value(val), threshold(thresh) {}
 
     uint64_t value;
     uint64_t threshold;
   };
 
-  typedef std::shared_ptr<Dropper> DropperSharedPtr;
+  typedef std::shared_ptr<DropperConfig> DropperConfigSharedPtr;
 
   /**
    * Checks to see if the queue requires any adaptations
@@ -149,10 +149,10 @@ private:
   uint64_t bytes_in_q_{0};
   TokenBucketImpl token_bucket_;
   std::list<RequestSharedPtr> queue_;
-  std::unordered_set<RequestSharedPtr> adapt_set_;
+  std::unordered_set<RequestSharedPtr> transform_set_;
 
-  // type -> Dropper
-  std::unordered_map<std::string, DropperSharedPtr> droppers_;
+  // type -> DropperConfig
+  std::unordered_map<std::string, DropperConfigSharedPtr> droppers_;
   const static std::string FROM_FRONT;
   const static std::string LARGER_THAN;
   const static std::string EVERY_NTH;

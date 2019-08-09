@@ -59,13 +59,12 @@ AdaptFilterFactory::createFilterFactory(const Json::Object& json_config,
   return createFilterFactoryFromProtoTyped(proto_config, stats_prefix, context);
 }
 
-/*  Router::RouteSpecificFilterConfigConstSharedPtr
+Router::RouteSpecificFilterConfigConstSharedPtr
 AdaptFilterFactory::createRouteSpecificFilterConfigTyped(
     const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
     Server::Configuration::FactoryContext&) {
-  return std::make_shared<const Fault::FaultSettings>(config);
+  return std::make_shared<const AdaptSettings>(config);
 }
-*/
 
 /**
  * Static registration for this sample filter. @see RegisterFactory.

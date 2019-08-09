@@ -29,10 +29,9 @@ public:
   void translateHttpAdaptFilter(const Json::Object& json_config, 
                                 envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config);
   
-   /*Router::RouteSpecificFilterConfigConstSharedPtr createRouteSpecificFilterConfigTyped(
+   Router::RouteSpecificFilterConfigConstSharedPtr createRouteSpecificFilterConfigTyped(
        const envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config,
        Server::Configuration::FactoryContext& context) override;
-      */
    
 };
 

@@ -39,14 +39,14 @@ void Queue::AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length)
   if (type == USE_EDGE) // DEMO: drop this after demo
     cloud_threshold_ = n;
 
-  DropperSharedPtr dropper = std::make_shared<Dropper>(n, queue_length);
+  DropperConfigSharedPtr dropper = std::make_shared<DropperConfig>(n, queue_length);
   droppers_[type] = dropper;
 }
 
 void Queue::Push(RequestSharedPtr req) {
   std::lock_guard<std::mutex> lck(mtx_);
   queue_.push_back(req);
-  adapt_set_.insert(req);
+  transform_set_.insert(req);
   bytes_in_q_ += req->size();
   ENVOY_LOG(trace, "limiter: adding request with size {}, new queue size in bytes = {}", req->size(), bytes_in_q_);
   if (!encode_) // TODO: just for demo
@@ -66,19 +66,20 @@ void Queue::pop() {
   ENVOY_LOG(trace, "limiter: popping request from queue");
   queue_.pop_front();
   bytes_in_q_ -= req->size();
-  adapt_set_.erase(req);
+  transform_set_.erase(req);
 }
 
 std::chrono::milliseconds Queue::DrainRequest() {
   std::unique_lock<std::mutex> lck(mtx_);
 
-  // TODO: should we reset the token bucket more often? 
-  // e.g. if we don't have requests for awhile, we will build up a lot of tokens
-  // and attempt to send all of this data at once...
-  /* if (queue_.empty()) {
-    saw_data_ = false; 
-  } */
-  if (queue_.empty()) ASSERT(bytes_in_q_ == 0);
+  // A sanity check that if the queue is empty than we have 0 bytes in the queue
+  if (queue_.empty()) {
+    ASSERT(bytes_in_q_ == 0);
+    // TODO: should we reset the token bucket more often?
+    // e.g. if we don't have requests for awhile, we will build up a lot of tokens
+    // and attempt to send all of this data at once...
+    // saw_data_ = false;
+  }
 
   // Wait while our queue is empty
   cv_.wait(lck, [&] { return !queue_.empty(); });
@@ -102,6 +103,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
     return std::chrono::milliseconds(0);
   }
 
+  // The first time we see data we should reset the token bucket to have just a single token
   if (!saw_data_) {
     token_bucket_.reset(1);
     saw_data_ = true;
@@ -118,21 +120,30 @@ std::chrono::milliseconds Queue::DrainRequest() {
 
   // TODO: I can't remember why I have this req->headers_only()
   if (tokens_obtained != 0 || req->headers_only()) {
+    // Sanity check that we have obtained the number of tokens that we need
     ASSERT(tokens_needed == tokens_obtained || req->headers_only());
 
     ENVOY_LOG(critical, "limiter: sending {} bytes from queue", request_size);
 
+    /**
+     * To allow the filter to send it's data, we must post on the dispatcher's event loop
+     * so that the original worker thread is making the callback to 
+     * continueEncoding()/continueDecoding(). This a strange hack to get around Envoy's
+     * attempt to handle a connection entirely on on thread, but it seems to work well enough. 
+     */
     if (encode_) {
       Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
+      // A sanity check that this request is for an encoded response
       ASSERT(cb != nullptr);
       req->dispatcher().post(
-          [cb] { cb->continueEncoding(); }); // allow the filter to continue passing data
+          [cb] { cb->continueEncoding(); }); 
     } else {
       Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
+      // A sanity check that this request is for a decoded request
       ASSERT(cb != nullptr);
       try {
         req->dispatcher().post([cb] {
-          // TODO: remove below here after demo
+          // DEMO: remove below here after demo
           // Modify all requests to redirect them to our cloud service
           /*std::function<void(Http::HeaderMap&)> head_f = [](Http::HeaderMap& headers) {
             if (headers.Host()) {
@@ -145,8 +156,6 @@ std::chrono::milliseconds Queue::DrainRequest() {
             }
           };
           cb->modifyDecodingHeaders(head_f);*/
-          // TODO: remove above here after demo
-          ASSERT(cb != nullptr);
           cb->continueDecoding();
         });           // allow the filter to continue passing data
       } catch (...) { // TODO: this is dangerous
@@ -154,11 +163,15 @@ std::chrono::milliseconds Queue::DrainRequest() {
       }
     }
 
-    pop();
+    pop(); // Remove the request that we just sent
+
+    // We need to rest the tokens needed to the tokens needed for our next request in the queue
+    tokens_needed = (queue_.front()->size() + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
   } else {
     ENVOY_LOG(critical, "limiter: not enough tokens obtained, tokens needed {}", tokens_needed);
   }
 
+  // Return the amount of time that we must sleep until enough tokens are available to send the next request
   return token_bucket_.allTokensAvailable(tokens_needed);
 }
 
@@ -166,7 +179,7 @@ void Queue::adapt_queue() {
   /**
    * This is just one simple transformation that I did for testing purposes
    */
-  if (transform_ && !adapt_set_.empty()) {
+  if (transform_ && !transform_set_.empty()) {
     const absl::string_view s("\n transformation on request");
     std::function<void(Http::HeaderMap&)> header_f = [s](Http::HeaderMap& headers) {
       int str_len = s.length();
@@ -180,6 +193,9 @@ void Queue::adapt_queue() {
     transform(buf_f, header_f);
   }
 
+  /**
+   * Iterate through all of our drop configurations and apply drop strategy if applicable
+   */
   for (auto dropper : droppers_) {
     if (queue_.size() >= dropper.second->threshold && dropper.second->threshold > 0) {
       // first is the type here
@@ -199,6 +215,7 @@ void Queue::drop_messages_to_cloud(uint64_t n) {
 }
 
 void Queue::drop_based_on_type(std::string type, uint64_t n) {
+  // Unfortunately we can't easily switch on strings so we have this if/else chain
   if (type == FROM_FRONT) {
     drop_first_n_requests(n);
   } else if (type == EVERY_NTH){ 
@@ -215,12 +232,12 @@ void Queue::drop_based_on_type(std::string type, uint64_t n) {
 void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
                       std::function<void(Http::HeaderMap&)> header_func) {
 
-  for (RequestSharedPtr req : adapt_set_) {
-    if (!req->headers_only()) {
+  for (RequestSharedPtr req : transform_set_) {
+    if (!req->adapted()) { // We don't want to transform the same request twice (this is somewhat redundant since we're using the transform_set)
+      // We can modify both the payload and the headers (e.g. content-length) for each request
       if (encode_) {
         Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
         cb->modifyEncodingBuffer(buf_func);
-        // we also need to modify headers sometimes (e.g. content-length)
         cb->modifyEncodingHeaders(header_func);
       } else {
         Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
@@ -229,26 +246,32 @@ void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
       }
       req->set_adapted(true);
     }
-    ENVOY_LOG(critical, "Finished queue transformation, adapted {} responses",
-              adapt_set_.size());
-    adapt_set_.clear(); // clear set so that we don't adapt messages twice
   }
+  ENVOY_LOG(critical, "Finished queue transformation, adapted {} responses", transform_set_.size());
+  transform_set_.clear(); // Clear set so that we don't adapt messages twice
 }
 
 std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::iterator it) {
     RequestSharedPtr req = *it;
 
-    // TODO: remove this, it's only for the demo so we don't drop these requests
-    /* if(!strcmp(req->headers().Method()->value().c_str(), "GET")) {
-      ENVOY_LOG(critical, "Not dropping GET request here...");
-      return it++;
-    }*/
-
     // TODO: DEMO: we wnat to drop both ways
-    /* if (encode_) {
+    if (encode_) {
         ASSERT(false);
         return it;
-    } */
+    } 
+    /*
+     * TODO: there's currently no sendLocalReply option for responses, so we should add this
+     * and then enable this and add an else for decoded messages and remove the above 
+    if (encode_) {
+      Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
+      ASSERT(cb != nullptr);
+      req->dispatcher().post([cb] {
+        // cb->streamInfo().setResponseFlag(StreamInfo::ResponseFlag::FaultInjected);
+        ASSERT(cb != nullptr);
+        ASSERT(cb->connection()->state() == Network::Connection::State::Open);
+        cb->sendLocalReply(Http::Code::TooManyRequests, "", nullptr, absl::nullopt);
+      });
+    }*/
     Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
     ASSERT(cb != nullptr);
     req->dispatcher().post([cb] {
@@ -263,13 +286,12 @@ std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::i
     bytes_in_q_ -= req->size();
 
     // We need to also erase it from out adapt set
-    adapt_set_.erase(req);
+    transform_set_.erase(req);
 
     return queue_.erase(it);
 }
 
 // Note: must be holding lock here
-// TODO: this function doesn't currently work...
 void Queue::drop_every_nth_request(uint64_t n) {
   ENVOY_LOG(critical, "Dropping every {}th request from our queue with {} requests", n,
             queue_.size());
