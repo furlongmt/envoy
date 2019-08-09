@@ -10,6 +10,13 @@
 #include "common/config/json_utility.h"
 #include "envoy/registry/registry.h"
 
+#define JSON_NON_MUTABLE_SET_INTEGER(json, message, field_name)  \
+do {                                                      \
+  if ((json).hasObject(#field_name)) { \
+    (message).set_##field_name((json).getInteger(#field_name)); \
+  } \
+} while (0)
+
 namespace Envoy {
 namespace Extensions {
 namespace HttpFilters {
@@ -28,11 +35,18 @@ Http::FilterFactoryCb AdaptFilterFactory::createFilterFactoryFromProtoTyped(
 void AdaptFilterFactory::translateHttpAdaptFilter(
     const Json::Object& json_config,
     envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config) {
-  if ((json_config).hasObject("encode_limit_kbps")) {
-    (proto_config).set_encode_limit_kbps(json_config.getInteger("encode_limit_kbps"));
-  }
-  if ((json_config).hasObject("decode_limit_kbps")) {
-    (proto_config).set_decode_limit_kbps(json_config.getInteger("decode_limit_kbps"));
+
+  JSON_NON_MUTABLE_SET_INTEGER(json_config, proto_config, encode_limit_kbps);
+  JSON_NON_MUTABLE_SET_INTEGER(json_config, proto_config, decode_limit_kbps);
+  JSON_NON_MUTABLE_SET_INTEGER(json_config, proto_config, decode_deadline);
+  JSON_NON_MUTABLE_SET_INTEGER(json_config, proto_config, encode_deadline);
+
+  for (const Json::ObjectSharedPtr& drop_entry : json_config.getObjectArray("drop_requests")) {
+    envoy::config::filter::http::adapt::v2::AdaptRateLimit::DropRequests* drop_request =
+        proto_config.mutable_drop_requests()->Add();
+    JSON_UTIL_SET_STRING(*drop_entry, *drop_request, type);
+    JSON_NON_MUTABLE_SET_INTEGER(*drop_entry, *drop_request, value);
+    JSON_NON_MUTABLE_SET_INTEGER(*drop_entry, *drop_request, queue_length);
   }
 }
 

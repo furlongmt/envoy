@@ -11,8 +11,20 @@ import "validate/validate.proto";
 import "gogoproto/gogo.proto";
 
 message AdaptRateLimit {
-  // The limit supplied in queue length
+
   uint64 decode_limit_kbps = 1 [(validate.rules).uint64.gte = 1];
+
   uint64 encode_limit_kbps = 2 [(validate.rules).uint64.gte = 1];
-  //uint64 queue_length = 1 [(validate.rules).uint64.gte = 1];
+
+  uint64 decode_deadline = 3 [(validate.rules).uint64.gte = 1];
+
+  uint64 encode_deadline = 4 [(validate.rules).uint64.gte = 1];
+
+  message DropRequests {
+    string type = 1 [(validate.rules).string.min_bytes = 1];
+    uint64 value = 2 [(validate.rules).uint64.gte = 0];
+    uint64 queue_length = 3 [(validate.rules).uint64.gte = 0];
+  }
+
+  repeated DropRequests drop_requests = 5;
 }

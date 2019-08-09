@@ -7,6 +7,9 @@ namespace Extensions {
 namespace HttpFilters {
 namespace AdaptFilter {
 
+/**
+ * This class defines the state that we need to maintain for each request in our queue.
+ */
 class Request {
 public:
   Request(Event::Dispatcher& dispatcher, Http::StreamEncoderFilterCallbacks* encoder_callbacks,
@@ -24,9 +27,9 @@ public:
   Http::StreamDecoderFilterCallbacks* decoder_callbacks() { return decoder_callbacks_; }
   uint64_t size() { return size_; }
   bool headers_only() { return headers_only_; }
-  bool adapted() {
+  bool adapted() {// TODO: this may not be correct as sometimes we may want to adapt just request headers perhaps?
     return adapted_ || headers_only_;
-  } // TODO: this isn't correct as sometimes we may want to adapt just request headers perhaps?
+  } 
   const Http::HeaderMap& headers() { return headers_; }
 
   void set_adapted(bool adapted) { adapted_ = adapted; }
@@ -36,7 +39,7 @@ private:
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_;
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_;
   uint64_t size_;
-  bool headers_only_; // specifies if request is headers only
+  bool headers_only_; // Specifies if request has no payload
   const Http::HeaderMap& headers_;
   bool adapted_{};    // TODO: this shouldn't be a bool as there's levels of adaption
 };

@@ -6,16 +6,28 @@ namespace Extensions {
 namespace HttpFilters {
 namespace AdaptFilter {
 
+/*
+ * These constants define the possible types of adapation that a user
+ * can define in their config file 
+ */
+const std::string Queue::FROM_FRONT = "front";
+const std::string Queue::EVERY_NTH = "every_nth";
+const std::string Queue::LARGER_THAN = "larger_than";
+const std::string Queue::USE_EDGE = "use_edge";
+
+/** 
+ * Our token bucket uses actual (real) time to determine when to drain 
+ * requests from the queue
+ */
 RealTimeSource Queue::time_source_;
 
-Queue::Queue(bool encode, bool drop, bool transform)
-    : drop_(drop), transform_(transform), encode_(encode),
+Queue::Queue(bool encode, bool transform)
+    : transform_(transform), encode_(encode),
       token_bucket_(MaxTokens, time_source_, SecondDivisor) {
   bytes_per_time_slice_ = ((max_kbps_ * 1024) / SecondDivisor);
-  drop_iterator_ = queue_.begin();
 }
 
-void Queue::SetMaxKbps(uint64_t max_kbps) {
+void Queue::set_max_kbps(uint64_t max_kbps) {
   std::lock_guard<std::mutex> lck(mtx_);
   if (max_kbps != max_kbps_) {
     max_kbps_ = max_kbps;
@@ -23,12 +35,24 @@ void Queue::SetMaxKbps(uint64_t max_kbps) {
   }
 }
 
+void Queue::AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length) {
+  if (type == USE_EDGE) // DEMO: drop this after demo
+    cloud_threshold_ = n;
+
+  DropperSharedPtr dropper = std::make_shared<Dropper>(n, queue_length);
+  droppers_[type] = dropper;
+}
+
 void Queue::Push(RequestSharedPtr req) {
   std::lock_guard<std::mutex> lck(mtx_);
   queue_.push_back(req);
   adapt_set_.insert(req);
   bytes_in_q_ += req->size();
-  ENVOY_LOG(critical, "limiter: adding request with size {}, new queue size in bytes = {}", req->size(), bytes_in_q_);
+  ENVOY_LOG(trace, "limiter: adding request with size {}, new queue size in bytes = {}", req->size(), bytes_in_q_);
+  if (!encode_) // TODO: just for demo
+    std::cout << "Queue size: " << queue_.size() << std::endl;
+  // Potentially adapt queue when we add a new request
+  adapt_queue();
   cv_.notify_one();
 }
 
@@ -45,31 +69,8 @@ void Queue::pop() {
   adapt_set_.erase(req);
 }
 
-std::chrono::milliseconds Queue::drain_request() {
+std::chrono::milliseconds Queue::DrainRequest() {
   std::unique_lock<std::mutex> lck(mtx_);
-
-  if (transform_ && bytes_in_q_ > BytesThreshold && !adapt_set_.empty()) {
-    const absl::string_view s("\n transformation on request");
-    std::function<void(Http::HeaderMap&)> header_f = [s](Http::HeaderMap& headers) {
-      int str_len = s.length();
-      auto length_header = headers.ContentLength();
-      uint64_t prev_content_length;
-      if (StringUtil::atoull(length_header->value().c_str(), prev_content_length))  {
-        headers.ContentLength()->value(prev_content_length + str_len);
-      }
-    };
-    std::function<void(Buffer::Instance&)> buf_f = [s](Buffer::Instance& buf) { buf.add(s); };
-    transform(buf_f, header_f);
-  }
-
-  // TODO: don't hardcode bytes threshold * 100
-  if (drop_ && bytes_in_q_ > BytesThreshold * 400) {
-      //drop_every_nth_request(decode_q_, decode_adapt_set_, 2);
-      drop_large_messages(200000);
-  } 
-  if (drop_ && queue_.size() > 20) {
-    drop_first_n_requests(queue_.size());
-  }
 
   // TODO: should we reset the token bucket more often? 
   // e.g. if we don't have requests for awhile, we will build up a lot of tokens
@@ -83,6 +84,23 @@ std::chrono::milliseconds Queue::drain_request() {
   cv_.wait(lck, [&] { return !queue_.empty(); });
 
   ENVOY_LOG(critical, "limiter: timer wakeup: buffered bytes in queue={}", bytes_in_q_);
+
+  // DEMO: remove after demo
+  if (!encode_ && max_kbps_ < cloud_threshold_) {
+    ENVOY_LOG(critical, "limiter: no wait, sending all messages");
+    while (!queue_.empty()) {
+      RequestSharedPtr req = queue_.front();
+      Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
+      ASSERT(cb != nullptr);
+      req->dispatcher().post([cb] {
+          ASSERT(cb != nullptr);
+          cb->continueDecoding();
+      });
+      pop();
+    }
+
+    return std::chrono::milliseconds(0);
+  }
 
   if (!saw_data_) {
     token_bucket_.reset(1);
@@ -107,13 +125,27 @@ std::chrono::milliseconds Queue::drain_request() {
     if (encode_) {
       Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
       ASSERT(cb != nullptr);
-      queue_.front()->dispatcher().post(
+      req->dispatcher().post(
           [cb] { cb->continueEncoding(); }); // allow the filter to continue passing data
     } else {
       Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
       ASSERT(cb != nullptr);
       try {
-        queue_.front()->dispatcher().post([cb] {
+        req->dispatcher().post([cb] {
+          // TODO: remove below here after demo
+          // Modify all requests to redirect them to our cloud service
+          /*std::function<void(Http::HeaderMap&)> head_f = [](Http::HeaderMap& headers) {
+            if (headers.Host()) {
+              //headers.insertEnvoyOriginalUrl().value(
+                  //absl::StrCat("http://", headers.Host()->value().getStringView(),
+                               //headers.Path()->value().getStringView()));
+              headers.insertHost().value(std::string("10.170.69.147:5001"));
+              headers.insertEnvoyDecoratorOperation().value(std::string("10.170.69.147:5001"));
+              ENVOY_LOG(critical, "Changed host headers to {}", headers);
+            }
+          };
+          cb->modifyDecodingHeaders(head_f);*/
+          // TODO: remove above here after demo
           ASSERT(cb != nullptr);
           cb->continueDecoding();
         });           // allow the filter to continue passing data
@@ -128,6 +160,56 @@ std::chrono::milliseconds Queue::drain_request() {
   }
 
   return token_bucket_.allTokensAvailable(tokens_needed);
+}
+
+void Queue::adapt_queue() {
+  /**
+   * This is just one simple transformation that I did for testing purposes
+   */
+  if (transform_ && !adapt_set_.empty()) {
+    const absl::string_view s("\n transformation on request");
+    std::function<void(Http::HeaderMap&)> header_f = [s](Http::HeaderMap& headers) {
+      int str_len = s.length();
+      auto length_header = headers.ContentLength();
+      uint64_t prev_content_length;
+      if (StringUtil::atoull(length_header->value().c_str(), prev_content_length))  {
+        headers.ContentLength()->value(prev_content_length + str_len);
+      }
+    };
+    std::function<void(Buffer::Instance&)> buf_f = [s](Buffer::Instance& buf) { buf.add(s); };
+    transform(buf_f, header_f);
+  }
+
+  for (auto dropper : droppers_) {
+    if (queue_.size() >= dropper.second->threshold && dropper.second->threshold > 0) {
+      // first is the type here
+      drop_based_on_type(dropper.first, dropper.second->value);
+    } else if (dropper.first == USE_EDGE) { // TODO: remove after demo
+      drop_based_on_type(dropper.first, dropper.second->value);
+    }
+  }
+}
+
+void Queue::drop_messages_to_cloud(uint64_t n) {
+  if (max_kbps_ > n) {
+    drop_messages_to_url(absl::string_view("edge-object-detector.default.svc.cluster.local:5002"));
+  } else {
+    drop_messages_to_url(absl::string_view("cloud-object-detector.default.svc.cluster.local:5001"));
+  }
+}
+
+void Queue::drop_based_on_type(std::string type, uint64_t n) {
+  if (type == FROM_FRONT) {
+    drop_first_n_requests(n);
+  } else if (type == EVERY_NTH){ 
+    drop_every_nth_request(n);
+  } else if (type == LARGER_THAN) {
+    drop_large_messages(n);
+  } else if (type == USE_EDGE){ // DEMO: really just for demo
+    drop_messages_to_cloud(n);
+   } else {
+    ENVOY_LOG(critical, "Type {} not recognized!", type);
+  }
 }
 
 void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
@@ -157,16 +239,16 @@ std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::i
     RequestSharedPtr req = *it;
 
     // TODO: remove this, it's only for the demo so we don't drop these requests
-    if(!strcmp(req->headers().Method()->value().c_str(), "GET")) {
+    /* if(!strcmp(req->headers().Method()->value().c_str(), "GET")) {
       ENVOY_LOG(critical, "Not dropping GET request here...");
       return it++;
-    }
+    }*/
 
-    // TODO
-    if (encode_) {
+    // TODO: DEMO: we wnat to drop both ways
+    /* if (encode_) {
         ASSERT(false);
         return it;
-    }
+    } */
     Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
     ASSERT(cb != nullptr);
     req->dispatcher().post([cb] {
@@ -176,7 +258,7 @@ std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::i
       cb->sendLocalReply(Http::Code::TooManyRequests, "", nullptr, absl::nullopt);
     }); 
 
-    ENVOY_LOG(critical, "Dropping request with size {}", req->size());
+    ENVOY_LOG(critical, "Dropping request of size {}", req->size());
 
     bytes_in_q_ -= req->size();
 
@@ -189,23 +271,22 @@ std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::i
 // Note: must be holding lock here
 // TODO: this function doesn't currently work...
 void Queue::drop_every_nth_request(uint64_t n) {
-  ASSERT(false);
   ENVOY_LOG(critical, "Dropping every {}th request from our queue with {} requests", n,
             queue_.size());
   uint64_t dropped_msgs = 0;
-  //auto it = decode_drop_iterator_;
-  while (drop_iterator_ != queue_.end()) {
-    drop_iterator_ = drop(drop_iterator_);
-    std::advance(drop_iterator_, n-1); // n-1 because we just removed an element from our list
+  auto it = queue_.begin();
+  while (it != queue_.end()) {
+    it = drop(it);
+    std::advance(it, n-1); // n-1 because we just removed an element from our list
     dropped_msgs++;
   } 
   ENVOY_LOG(critical, "Dropped {} messages", dropped_msgs);
 }
 
 void Queue::drop_first_n_requests(uint64_t n) {
-  ASSERT(n <= queue_.size());
+
   ENVOY_LOG(critical, "Dropping first {} messages in queue of size {}", n, queue_.size());
-  for (uint64_t i = 0; i < n; i++) {
+  for (uint64_t i = 0; i < n && i < queue_.size(); i++) {
     drop(queue_.begin());
   }
 }
@@ -233,6 +314,22 @@ void Queue::drop_large_messages(uint64_t size) {
             "We now have {} messages in our queue after dropping {} requests, bytes in queue = {}",
             queue_.size(), dropped_msgs, bytes_in_q_);
 }
+
+void Queue::drop_messages_to_url(absl::string_view url) {
+  ENVOY_LOG(critical, "Dropping all requests to {}", url);
+  auto it = queue_.begin();
+  while (it != queue_.end()) {
+    ASSERT(*it != nullptr);
+    const Http::HeaderMap& headers = (*it)->headers();
+    if (headers.Host() && headers.Host()->value().getStringView() == url) {
+      it = drop(it);
+    } else {
+      it++;
+    }
+  }
+
+}
+
 } // namespace AdaptFilter
 } // namespace HttpFilters
 } // namespace Extensions

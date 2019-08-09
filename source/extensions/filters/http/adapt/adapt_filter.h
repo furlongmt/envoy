@@ -23,9 +23,13 @@ namespace AdaptFilter {
  * All adapt stats. @see stats_macros.h
  */
 // TODO: Accumulate may not be the right option, need to look into hot restart
-#define ALL_ADAPT_STATS(COUNTER, GAUGE)               \
+#define ALL_ADAPT_STATS(COUNTER, GAUGE)            \
   GAUGE(response_queue_size)                       \
-  GAUGE(request_queue_size)
+  GAUGE(request_queue_size)                        \
+  GAUGE(request_bytes_made_dl)                     \
+  GAUGE(response_bytes_made_dl)                    \
+  GAUGE(bytes_in_request_queue)                    \
+  GAUGE(bytes_in_response_queue)
 
 /*
  * Struct defintion for all adapt stats. @see stats_macros.h
@@ -64,7 +68,7 @@ private:
 using ConfigSharedPtr = std::shared_ptr<AdaptConfig>;
 
 /**
- * Implementation of a adaptation filter (both upstream and downstream traffic).
+ * Implementation of an adaptation filter (both upstream and downstream traffic).
  */
 class Adapt : public Http::StreamFilter,
               public Logger::Loggable<Logger::Id::filter> {
@@ -102,16 +106,34 @@ public:
   void encodeComplete() override;
 
 private:
+
   ConfigSharedPtr config_;
-  uint64_t encode_buffer_len_;
-  uint64_t decode_buffer_len_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
+  /**
+   * *_buffer_len_ represents the total size of the request, both headers and data.
+   */
+  uint64_t encode_buffer_len_;
+  uint64_t decode_buffer_len_; 
+  /**
+   * *_headers_only_ represents whether the request has any payload or is just headers.
+   */
   bool encode_headers_only_;
   bool decode_headers_only_;
+  /**
+   * *_headers_ are the headers of the respective requests
+   */
   Http::HeaderMap* encode_headers_;
   Http::HeaderMap* decode_headers_;
+  /**
+   * *_entered_tp_ are the timestamps of when the message entered the queue
+   */
+  std::chrono::system_clock::time_point decode_entered_tp_;
+  std::chrono::system_clock::time_point encode_entered_tp_;
+  // TODO: add to config and should probably have seperate deadline for encode/decode?
+  uint64_t deadline_; // in ms
 };
+
 
 } // namespace AdaptFilter
 } // namespace HttpFilters

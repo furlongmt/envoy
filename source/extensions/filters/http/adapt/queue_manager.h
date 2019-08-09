@@ -18,17 +18,40 @@ namespace AdaptFilter {
 
 class QueueManager : Logger::Loggable<Logger::Id::filter> {
 public:
+  /**
+   * Queue Manager is a singleton instance that spawns a thread for
+   * both our encode and decode queues to rate limit requests.
+   */
   static QueueManager& Instance() {
     static QueueManager instance;
     return instance;
   }
 
-  void setDecodeMaxKbps(uint64_t max_kbps);
-  void setEncodeMaxKbps(uint64_t max_kbps);
+  void SetDecodeMaxKbps(uint64_t max_kbps);
+  void SetEncodeMaxKbps(uint64_t max_kbps);
 
-  void addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
+  /**
+   * Add a new drop adaption strategy when the config file for this filter changes.
+   */
+  void AddDropAdaptation(std::string type, uint64_t n, uint64_t queue_length);
+
+  /**
+   * Create a new request and add it to the encoding queue.
+   * @param callbacks The callbacks for this filter
+   * @param size The size of the requests
+   * @param headers_only True if request has no body, False otherwise
+   * @param headers The headers of the request
+   */
+  void AddEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
                          bool headers_only, const Http::HeaderMap& headers);
-  void addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
+  /**
+   * Create a new request and add it to the decoding queue.
+   * @param callbacks The callbacks for this filter
+   * @param size The size of the requests
+   * @param headers_only True if request has no body, False otherwise
+   * @param headers The headers of the request
+   */
+  void AddDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
                          bool headers_only, const Http::HeaderMap& headers);
 
 protected:

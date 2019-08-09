@@ -9,12 +9,12 @@ namespace Extensions {
 namespace HttpFilters {
 namespace AdaptFilter {
 
-QueueManager::QueueManager() : encode_q_(true, false, false), decode_q_(false, true, false) {
+QueueManager::QueueManager() : encode_q_(true, false), decode_q_(false, false) {
 
   // Start decoder timer
   std::thread([this]() {
     while (true) {
-      std::chrono::milliseconds ms = decode_q_.drain_request();
+      std::chrono::milliseconds ms = decode_q_.DrainRequest();
       std::this_thread::sleep_for(ms);
     }
   }).detach();
@@ -22,30 +22,35 @@ QueueManager::QueueManager() : encode_q_(true, false, false), decode_q_(false, t
   // Start encoder timer
   std::thread([this]() {
     while (true) {
-      std::chrono::milliseconds ms = encode_q_.drain_request();
+      std::chrono::milliseconds ms = encode_q_.DrainRequest();
       std::this_thread::sleep_for(ms);
     }
   }).detach();
 }
 
-void QueueManager::setDecodeMaxKbps(uint64_t max_kbps) {
-  decode_q_.SetMaxKbps(max_kbps);
+void QueueManager::SetDecodeMaxKbps(uint64_t max_kbps) {
+  decode_q_.set_max_kbps(max_kbps);
   ENVOY_LOG(critical, "Updated decode max kbps to {}", max_kbps);
 }
 
-void QueueManager::setEncodeMaxKbps(uint64_t max_kbps) {
-  encode_q_.SetMaxKbps(max_kbps);
+void QueueManager::SetEncodeMaxKbps(uint64_t max_kbps) {
+  encode_q_.set_max_kbps(max_kbps);
   ENVOY_LOG(critical, "Updated encode max kbps to {}", max_kbps);
 }
 
-void QueueManager::addEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
+void QueueManager::AddDropAdaptation(std::string type, uint64_t n, uint64_t queue_length) {
+  decode_q_.AddDropStrategy(type, n, queue_length);
+  ENVOY_LOG(critical, "Set drop type {} to {} when queue_length = {}", type, n, queue_length);
+}
+
+void QueueManager::AddEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
                                      bool headers_only, const Http::HeaderMap& headers) {
   RequestSharedPtr req =
       std::make_shared<Request>(callbacks->dispatcher(), callbacks, size, headers_only, headers);
   encode_q_.Push(req);
 }
 
-void QueueManager::addDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
+void QueueManager::AddDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
                                      bool headers_only, const Http::HeaderMap& headers) {
   RequestSharedPtr req =
       std::make_shared<Request>(callbacks->dispatcher(), callbacks, size, headers_only, headers);
