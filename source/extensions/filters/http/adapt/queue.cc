@@ -166,7 +166,13 @@ std::chrono::milliseconds Queue::DrainRequest() {
     pop(); // Remove the request that we just sent
 
     // We need to rest the tokens needed to the tokens needed for our next request in the queue
-    tokens_needed = (queue_.front()->size() + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
+    if (!queue_.empty()) {
+      tokens_needed = (queue_.front()->size() + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
+    } else {
+      // Since our queue is empty, returning 0 should cause us to immediately re-enter this function
+      // but we'll wait on our cv until something new is added to the queue
+      tokens_needed = 0; 
+    }
   } else {
     ENVOY_LOG(critical, "limiter: not enough tokens obtained, tokens needed {}", tokens_needed);
   }
