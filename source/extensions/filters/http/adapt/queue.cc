@@ -165,7 +165,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
 
     pop(); // Remove the request that we just sent
 
-    // We need to rest the tokens needed to the tokens needed for our next request in the queue
+    // We need to reset the tokens needed to the tokens needed for our next request in the queue
     if (!queue_.empty()) {
       tokens_needed = (queue_.front()->size() + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
     } else {
