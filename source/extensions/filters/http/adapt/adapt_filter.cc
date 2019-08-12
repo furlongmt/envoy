@@ -58,6 +58,9 @@ void Adapt::onDestroy() {
   if(decode_dropped_) {
     ENVOY_LOG(critical, "We dropped a message with size {} it seems", decode_buffer_len_);
   }
+  if (decode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
+    config_->stats().reqeuest_total_bytes_sent_.add(encode_buffer_len_);
+  }
 #endif
 #ifdef ENCODE
   if (encode_buffer_len_ > 0) config_->stats().response_queue_size_.dec();
@@ -67,6 +70,9 @@ void Adapt::onDestroy() {
   ENVOY_LOG(critical, "Response was in queue for {}ms", encode_time_span.count());
   if (encode_time_span.count() < config_->settings()->get_encode_deadline() && !encode_dropped_) {
     config_->stats().response_bytes_made_dl_.add(encode_buffer_len_);
+  }
+  if (!encode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
+    config_->stats().response_total_bytes_sent_.add(encode_buffer_len_);
   }
 #endif
   ENVOY_LOG(trace, "Adapt filter onDestroy()");
