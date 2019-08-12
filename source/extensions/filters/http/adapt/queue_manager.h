@@ -43,7 +43,7 @@ public:
    * @param headers The headers of the request
    */
   void AddEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
-                         bool headers_only, const Http::HeaderMap& headers);
+                         bool headers_only, const Http::HeaderMap& headers, bool& dropped);
   /**
    * Create a new request and add it to the decoding queue.
    * @param callbacks The callbacks for this filter
@@ -52,7 +52,7 @@ public:
    * @param headers The headers of the request
    */
   void AddDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
-                         bool headers_only, const Http::HeaderMap& headers);
+                         bool headers_only, const Http::HeaderMap& headers, bool &dropped);
 
 protected:
   QueueManager();

@@ -22,14 +22,13 @@ namespace AdaptFilter {
 /*
  * All adapt stats. @see stats_macros.h
  */
-// TODO: Accumulate may not be the right option, need to look into hot restart
 #define ALL_ADAPT_STATS(COUNTER, GAUGE)            \
   GAUGE(response_queue_size)                       \
   GAUGE(request_queue_size)                        \
   GAUGE(request_bytes_made_dl)                     \
   GAUGE(response_bytes_made_dl)                    \
   GAUGE(bytes_in_request_queue)                    \
-  GAUGE(bytes_in_response_queue)
+  GAUGE(bytes_in_response_queue)                   
 
 /*
  * Struct defintion for all adapt stats. @see stats_macros.h
@@ -45,8 +44,12 @@ class AdaptSettings : public Router::RouteSpecificFilterConfig {
 public:
   AdaptSettings(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& limit);
   uint32_t get_limit_kbps() const { return limit_kbps; }
+  uint64_t get_encode_deadline() const { return encode_deadline; }
+  uint64_t get_decode_deadline() const { return decode_deadline; }
 private:
   uint32_t limit_kbps;
+  uint64_t encode_deadline;
+  uint64_t decode_deadline;
 };
 
 class AdaptConfig {
@@ -130,8 +133,12 @@ private:
    */
   std::chrono::system_clock::time_point decode_entered_tp_;
   std::chrono::system_clock::time_point encode_entered_tp_;
-  // TODO: add to config and should probably have seperate deadline for encode/decode?
-  uint64_t deadline_; // in ms
+
+  /**
+   * *_dropped_ represents whether our request was dropped from the queue
+   */ 
+  bool decode_dropped_{};
+  bool encode_dropped_{};
 };
 
 

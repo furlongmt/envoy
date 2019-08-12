@@ -1,6 +1,6 @@
 
 
-#include "extensions/filters/http/adapt/request.h"
+#include "extensions/filters/http/adapt/message.h"
 #include "common/common/token_bucket_impl.h"
 
 namespace Envoy {
@@ -34,7 +34,7 @@ public:
    * state (e.g. bytes_in_q_)  and adapt our queue if necessary
    * @param req The request to be added to the back of the queue
    */
-  void Push(RequestSharedPtr req);
+  void Push(MessageSharedPtr req);
 
   /**
    * Grabs mutex before removing request from queue @see pop() below
@@ -99,7 +99,7 @@ private:
    * @param it Iterator to the request to drop
    * @return The next request in the queue
    */
-  std::list<RequestSharedPtr>::iterator drop(std::list<RequestSharedPtr>::iterator it);
+  std::list<MessageSharedPtr>::iterator drop(std::list<MessageSharedPtr>::iterator it);
 
   /**
    * Checks type of drop request, and calls the appropriate drop function according to this type.
@@ -148,8 +148,8 @@ private:
   uint64_t bytes_per_time_slice_;
   uint64_t bytes_in_q_{0};
   TokenBucketImpl token_bucket_;
-  std::list<RequestSharedPtr> queue_;
-  std::unordered_set<RequestSharedPtr> transform_set_;
+  std::list<MessageSharedPtr> queue_;
+  std::unordered_set<MessageSharedPtr> transform_set_;
 
   // type -> DropperConfig
   std::unordered_map<std::string, DropperConfigSharedPtr> droppers_;

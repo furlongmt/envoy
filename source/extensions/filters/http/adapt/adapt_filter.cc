@@ -20,6 +20,8 @@ AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::Adapt
     QueueManager::Instance().AddDropAdaptation(drop_request.type(), drop_request.value(),
                                                drop_request.queue_length());
   }
+  decode_deadline = config.decode_deadline();
+  encode_deadline = config.encode_deadline();
 }
 
 AdaptConfig::AdaptConfig(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
@@ -35,8 +37,6 @@ InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& 
 
 Adapt::Adapt(ConfigSharedPtr config)
     : config_(config), encode_buffer_len_(0), decode_buffer_len_(0) {
-      // TODO: change deadline to config
-      deadline_ = 100;
       ENVOY_LOG(trace, "New adapt filter created.");
 }
 
@@ -49,19 +49,23 @@ void Adapt::onDestroy() {
   if (decode_buffer_len_ > 0) config_->stats().request_queue_size_.dec();
   config_->stats().bytes_in_request_queue_.sub(decode_buffer_len_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> decode_time_span = decode_entered_tp_ - std::chrono::system_clock::now();
-  if (decode_time_span.count() < deadline_) {
-    // TODO: this is wrong in the case where we drop messages
+  std::chrono::duration<double, std::milli> decode_time_span = std::chrono::system_clock::now() - decode_entered_tp_;
+  ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
+  if (decode_time_span.count() < config_->settings()->get_decode_deadline() && !decode_dropped_) {
     config_->stats().request_bytes_made_dl_.add(decode_buffer_len_);
+  }
+  //TODO: remove this after debugging
+  if(decode_dropped_) {
+    ENVOY_LOG(critical, "We dropped a message with size {} it seems", decode_buffer_len_);
   }
 #endif
 #ifdef ENCODE
   if (encode_buffer_len_ > 0) config_->stats().response_queue_size_.dec();
   config_->stats().bytes_in_response_queue_.sub(encode_buffer_len_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> encode_time_span = encode_entered_tp_ - std::chrono::system_clock::now();
-  if (encode_time_span.count() < deadline_) {
-    // TODO: this is wrong in the case where we drop messages
+  std::chrono::duration<double, std::milli> encode_time_span = std::chrono::system_clock::now() - encode_entered_tp_; 
+  ENVOY_LOG(critical, "Response was in queue for {}ms", encode_time_span.count());
+  if (encode_time_span.count() < config_->settings()->get_encode_deadline() && !encode_dropped_) {
     config_->stats().response_bytes_made_dl_.add(encode_buffer_len_);
   }
 #endif
@@ -109,7 +113,7 @@ void Adapt::decodeComplete() {
   config_->stats().bytes_in_request_queue_.add(decode_buffer_len_);
   decode_entered_tp_ = std::chrono::system_clock::now();
   QueueManager::Instance().AddDecoderToQueue(decoder_callbacks_, decode_buffer_len_,
-                                             decode_headers_only_, *decode_headers_);
+                                             decode_headers_only_, *decode_headers_, decode_dropped_);
 #endif
 }
 
@@ -152,7 +156,7 @@ void Adapt::encodeComplete() {
   encode_entered_tp_ = std::chrono::system_clock::now();
   ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_);
   QueueManager::Instance().AddEncoderToQueue(encoder_callbacks_, encode_buffer_len_,
-                                             encode_headers_only_, *encode_headers_);
+                                             encode_headers_only_, *encode_headers_, encode_dropped_);
 #endif
 }
 

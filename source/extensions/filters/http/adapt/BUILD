@@ -13,7 +13,7 @@ envoy_package()
 envoy_cc_library(
     name = "queue_lib",
     srcs = ["queue.cc"],
-    hdrs = ["queue.h", "request.h"],
+    hdrs = ["queue.h", "message.h"],
     deps = [
         "//include/envoy/event:timer_interface",
         "//include/envoy/http:codes_interface",

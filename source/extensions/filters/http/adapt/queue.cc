@@ -43,7 +43,7 @@ void Queue::AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length)
   droppers_[type] = dropper;
 }
 
-void Queue::Push(RequestSharedPtr req) {
+void Queue::Push(MessageSharedPtr req) {
   std::lock_guard<std::mutex> lck(mtx_);
   queue_.push_back(req);
   transform_set_.insert(req);
@@ -62,7 +62,7 @@ void Queue::Pop() {
 }
 
 void Queue::pop() {
-  RequestSharedPtr req = queue_.front();
+  MessageSharedPtr req = queue_.front();
   ENVOY_LOG(trace, "limiter: popping request from queue");
   queue_.pop_front();
   bytes_in_q_ -= req->size();
@@ -90,7 +90,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
   if (!encode_ && max_kbps_ < cloud_threshold_) {
     ENVOY_LOG(critical, "limiter: no wait, sending all messages");
     while (!queue_.empty()) {
-      RequestSharedPtr req = queue_.front();
+      MessageSharedPtr req = queue_.front();
       Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
       ASSERT(cb != nullptr);
       req->dispatcher().post([cb] {
@@ -110,7 +110,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
   }
 
   uint64_t tokens_needed = 0;
-  RequestSharedPtr req = queue_.front();
+  MessageSharedPtr req = queue_.front();
   uint64_t request_size = req->size();
 
   ENVOY_LOG(trace, "limiter: request size = {}", request_size);
@@ -238,7 +238,7 @@ void Queue::drop_based_on_type(std::string type, uint64_t n) {
 void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
                       std::function<void(Http::HeaderMap&)> header_func) {
 
-  for (RequestSharedPtr req : transform_set_) {
+  for (MessageSharedPtr req : transform_set_) {
     if (!req->adapted()) { // We don't want to transform the same request twice (this is somewhat redundant since we're using the transform_set)
       // We can modify both the payload and the headers (e.g. content-length) for each request
       if (encode_) {
@@ -257,8 +257,8 @@ void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
   transform_set_.clear(); // Clear set so that we don't adapt messages twice
 }
 
-std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::iterator it) {
-    RequestSharedPtr req = *it;
+std::list<MessageSharedPtr>::iterator Queue::drop(std::list<MessageSharedPtr>::iterator it) {
+    MessageSharedPtr req = *it;
 
     // TODO: DEMO: we wnat to drop both ways
     if (encode_) {
@@ -293,6 +293,10 @@ std::list<RequestSharedPtr>::iterator Queue::drop(std::list<RequestSharedPtr>::i
 
     // We need to also erase it from out adapt set
     transform_set_.erase(req);
+
+
+    // Set this message to dropped
+    req->set_dropped(true);
 
     return queue_.erase(it);
 }
