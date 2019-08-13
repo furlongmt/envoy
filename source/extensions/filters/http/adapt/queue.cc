@@ -78,7 +78,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
     // TODO: should we reset the token bucket more often?
     // e.g. if we don't have requests for awhile, we will build up a lot of tokens
     // and attempt to send all of this data at once...
-    // saw_data_ = false;
+    saw_data_ = false;
   }
 
   // Wait while our queue is empty

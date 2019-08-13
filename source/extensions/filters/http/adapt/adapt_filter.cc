@@ -58,8 +58,8 @@ void Adapt::onDestroy() {
   if(decode_dropped_) {
     ENVOY_LOG(critical, "We dropped a message with size {} it seems", decode_buffer_len_);
   }
-  if (decode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
-    config_->stats().reqeuest_total_bytes_sent_.add(encode_buffer_len_);
+  if (!decode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
+    config_->stats().request_total_bytes_sent_.add(decode_buffer_len_);
   }
 #endif
 #ifdef ENCODE
@@ -139,7 +139,7 @@ Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap&, bool) {
 
 #ifdef ENCODE
 Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool) {
-  ENVOY_LOG(critical, "Writing {} bytes to buffer in encode.", data.length());
+  ENVOY_LOG(trace, "Writing {} bytes to buffer in encode.", data.length());
   encode_buffer_len_ += data.length();
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }

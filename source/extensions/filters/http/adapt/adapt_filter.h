@@ -23,14 +23,14 @@ namespace AdaptFilter {
  * All adapt stats. @see stats_macros.h
  */
 #define ALL_ADAPT_STATS(COUNTER, GAUGE)            \
-  GAUGE(response_queue_size)                       \
-  GAUGE(request_queue_size)                        \
   COUNTER(request_bytes_made_dl)                   \
   COUNTER(response_bytes_made_dl)                  \
-  GAUGE(bytes_in_request_queue)                    \
-  GAUGE(bytes_in_response_queue)                   \            
   COUNTER(request_total_bytes_sent)                \
-  COUNTER(response_total_bytes_sent)
+  COUNTER(response_total_bytes_sent)               \
+  GAUGE(response_queue_size)                       \
+  GAUGE(request_queue_size)                        \
+  GAUGE(bytes_in_request_queue)                    \
+  GAUGE(bytes_in_response_queue)                              
 
 /*
  * Struct defintion for all adapt stats. @see stats_macros.h
