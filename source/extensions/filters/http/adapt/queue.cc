@@ -88,7 +88,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
   ENVOY_LOG(critical, "limiter: timer wakeup: buffered bytes in queue={}", bytes_in_q_);
 
   // DEMO: remove after demo
-  /* if (!encode_ && max_kbps_ < cloud_threshold_) {
+  if (!encode_ && max_kbps_ < cloud_threshold_) {
     ENVOY_LOG(critical, "limiter: no wait, sending all messages");
     while (!queue_.empty()) {
       MessageSharedPtr req = queue_.front();
@@ -102,7 +102,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
     }
 
     return std::chrono::milliseconds(0);
-  } */
+  } 
 
   // The first time we see data we should reset the token bucket to have just a single token
   if (!saw_data_) {
