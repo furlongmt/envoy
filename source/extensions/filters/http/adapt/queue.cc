@@ -32,6 +32,7 @@ void Queue::set_max_kbps(uint64_t max_kbps) {
   if (max_kbps != max_kbps_) {
     max_kbps_ = max_kbps;
     bytes_per_time_slice_ = ((max_kbps_ * 1024) / SecondDivisor);
+    token_bucket_.reset(1); // Reset our token bucket when we change the bandwidth to start fresh
   }
 }
 
