@@ -60,6 +60,9 @@ void Adapt::onDestroy() {
   if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
     config_->stats().request_total_bytes_sent_.add(request_->size_);
   }
+  if (request_->dropped_) {
+    config_->stats().requests_dropped_.inc();
+  }
 #endif
 #ifdef ENCODE
   if (response_->size_ > 0) {
@@ -74,6 +77,9 @@ void Adapt::onDestroy() {
   }
   if (!response_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
     config_->stats().response_total_bytes_sent_.add(response_->size_);
+  }
+  if (response_->dropped_) {
+    config_->stats().responses_dropped_.inc();
   }
 #endif
   ENVOY_LOG(trace, "Adapt filter onDestroy()");
