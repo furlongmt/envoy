@@ -44,16 +44,18 @@ void QueueManager::AddDropAdaptation(std::string type, uint64_t n, uint64_t queu
 }
 
 void QueueManager::AddEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
-                                     bool headers_only, const Http::HeaderMap& headers, bool& dropped) {
+                                     bool headers_only, const Http::HeaderMap& headers, bool& dropped,
+                                     std::chrono::system_clock::time_point& tp) {
   MessageSharedPtr req =
-      std::make_shared<Message>(callbacks->dispatcher(), callbacks, size, headers_only, headers, dropped);
+      std::make_shared<Message>(callbacks->dispatcher(), callbacks, size, headers_only, headers, dropped, tp);
   encode_q_.Push(req);
 }
 
 void QueueManager::AddDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
-                                     bool headers_only, const Http::HeaderMap& headers, bool& dropped) {
+                                     bool headers_only, const Http::HeaderMap& headers, bool& dropped, 
+                                     std::chrono::system_clock::time_point& tp) {
   MessageSharedPtr req =
-      std::make_shared<Message>(callbacks->dispatcher(), callbacks, size, headers_only, headers, dropped);
+      std::make_shared<Message>(callbacks->dispatcher(), callbacks, size, headers_only, headers, dropped, tp);
   decode_q_.Push(req);
 }
 

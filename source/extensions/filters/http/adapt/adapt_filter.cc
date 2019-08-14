@@ -22,6 +22,7 @@ AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::Adapt
   }
   decode_deadline = config.decode_deadline();
   encode_deadline = config.encode_deadline();
+  ENVOY_LOG(critical, "Decode deadline: {}, Encode deadline: {}", decode_deadline, encode_deadline);
 }
 
 AdaptConfig::AdaptConfig(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
@@ -46,29 +47,29 @@ Adapt::~Adapt() { ENVOY_LOG(trace, "Cleaning up adapt filter."); }
 // When the filter is destroyed, we know that the request has left the queue
 void Adapt::onDestroy() {
 #ifdef DECODE
-  if (decode_buffer_len_ > 0) config_->stats().request_queue_size_.dec();
+  if (decode_buffer_len_ > 0) {
+     config_->stats().request_queue_size_.dec();
+  }
   config_->stats().bytes_in_request_queue_.sub(decode_buffer_len_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> decode_time_span = std::chrono::system_clock::now() - decode_entered_tp_;
+  std::chrono::duration<double, std::milli> decode_time_span = decode_exited_tp_ - decode_entered_tp_;
   ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
-  if (decode_time_span.count() < config_->settings()->get_decode_deadline() && !decode_dropped_) {
+  if (!decode_dropped_ && decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
     config_->stats().request_bytes_made_dl_.add(decode_buffer_len_);
-  }
-  //TODO: remove this after debugging
-  if(decode_dropped_) {
-    ENVOY_LOG(critical, "We dropped a message with size {} it seems", decode_buffer_len_);
   }
   if (!decode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
     config_->stats().request_total_bytes_sent_.add(decode_buffer_len_);
   }
 #endif
 #ifdef ENCODE
-  if (encode_buffer_len_ > 0) config_->stats().response_queue_size_.dec();
+  if (encode_buffer_len_ > 0) {
+    config_->stats().response_queue_size_.dec();
+  }
   config_->stats().bytes_in_response_queue_.sub(encode_buffer_len_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> encode_time_span = std::chrono::system_clock::now() - encode_entered_tp_; 
-  ENVOY_LOG(critical, "Response was in queue for {}ms", encode_time_span.count());
-  if (encode_time_span.count() < config_->settings()->get_encode_deadline() && !encode_dropped_) {
+  std::chrono::duration<double, std::milli> encode_time_span = encode_exited_tp_ - encode_entered_tp_; 
+  ENVOY_LOG(critical, "Response was in queue for {}ms, deadline is {}ms", encode_time_span.count(), config_->settings()->get_encode_deadline());
+  if (!encode_dropped_ && encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
     config_->stats().response_bytes_made_dl_.add(encode_buffer_len_);
   }
   if (!encode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
@@ -78,7 +79,6 @@ void Adapt::onDestroy() {
   ENVOY_LOG(trace, "Adapt filter onDestroy()");
 }
 
-// TODO: we probably want to buffer headers and payload...
 #ifdef DECODE
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
   decode_headers_only_ = end_stream;
@@ -119,7 +119,8 @@ void Adapt::decodeComplete() {
   config_->stats().bytes_in_request_queue_.add(decode_buffer_len_);
   decode_entered_tp_ = std::chrono::system_clock::now();
   QueueManager::Instance().AddDecoderToQueue(decoder_callbacks_, decode_buffer_len_,
-                                             decode_headers_only_, *decode_headers_, decode_dropped_);
+                                             decode_headers_only_, *decode_headers_, decode_dropped_,
+                                             decode_exited_tp_);
 #endif
 }
 
@@ -162,7 +163,8 @@ void Adapt::encodeComplete() {
   encode_entered_tp_ = std::chrono::system_clock::now();
   ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_);
   QueueManager::Instance().AddEncoderToQueue(encoder_callbacks_, encode_buffer_len_,
-                                             encode_headers_only_, *encode_headers_, encode_dropped_);
+                                             encode_headers_only_, *encode_headers_, encode_dropped_,
+                                             encode_exited_tp_);
 #endif
 }
 

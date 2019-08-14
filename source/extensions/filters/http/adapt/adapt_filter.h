@@ -42,7 +42,8 @@ struct InstanceStats {
 /*
  * Configuration for adaptation filter.
  */
-class AdaptSettings : public Router::RouteSpecificFilterConfig {
+class AdaptSettings : public Router::RouteSpecificFilterConfig,
+                      public Logger::Loggable<Logger::Id::filter> {
 public:
   AdaptSettings(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& limit);
   uint32_t get_limit_kbps() const { return limit_kbps; }
@@ -65,7 +66,7 @@ public:
 private:
   static InstanceStats generateStats(const std::string& name, Stats::Scope &scope);
 
-  const AdaptSettings settings_;
+  AdaptSettings settings_;
   const InstanceStats stats_;
   TimeSource& time_source_;
 };
@@ -135,6 +136,12 @@ private:
    */
   std::chrono::system_clock::time_point decode_entered_tp_;
   std::chrono::system_clock::time_point encode_entered_tp_;
+
+  /**
+   * *_exited_tp_ are the timestamps of when the message exited the queue
+   */
+  std::chrono::system_clock::time_point decode_exited_tp_;
+  std::chrono::system_clock::time_point encode_exited_tp_;
 
   /**
    * *_dropped_ represents whether our request was dropped from the queue

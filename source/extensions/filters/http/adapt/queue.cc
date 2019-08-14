@@ -36,9 +36,6 @@ void Queue::set_max_kbps(uint64_t max_kbps) {
 }
 
 void Queue::AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length) {
-  if (type == USE_EDGE) // DEMO: drop this after demo
-    cloud_threshold_ = n;
-
   DropperConfigSharedPtr dropper = std::make_shared<DropperConfig>(n, queue_length);
   droppers_[type] = dropper;
 }
@@ -67,6 +64,7 @@ void Queue::pop() {
   queue_.pop_front();
   bytes_in_q_ -= req->size();
   transform_set_.erase(req);
+  req->set_exited_tp(std::chrono::system_clock::now()); // When popped from the queue, set our timestamp since we're not dropped
 }
 
 std::chrono::milliseconds Queue::DrainRequest() {
@@ -212,14 +210,6 @@ void Queue::adapt_queue() {
   }
 }
 
-void Queue::drop_messages_to_cloud(uint64_t n) {
-  if (max_kbps_ > n) {
-    drop_messages_to_url(absl::string_view("edge-object-detector.default.svc.cluster.local:5002"));
-  } else {
-    drop_messages_to_url(absl::string_view("cloud-object-detector.default.svc.cluster.local:5001"));
-  }
-}
-
 void Queue::drop_based_on_type(std::string type, uint64_t n) {
   // Unfortunately we can't easily switch on strings so we have this if/else chain
   if (type == FROM_FRONT) {
@@ -228,9 +218,7 @@ void Queue::drop_based_on_type(std::string type, uint64_t n) {
     drop_every_nth_request(n);
   } else if (type == LARGER_THAN) {
     drop_large_messages(n);
-  } else if (type == USE_EDGE){ // DEMO: really just for demo
-    drop_messages_to_cloud(n);
-   } else {
+  } else {
     ENVOY_LOG(critical, "Type {} not recognized!", type);
   }
 }
