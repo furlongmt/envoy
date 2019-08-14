@@ -116,38 +116,9 @@ private:
   ConfigSharedPtr config_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
-  /**
-   * *_buffer_len_ represents the total size of the request, both headers and data.
-   */
-  uint64_t encode_buffer_len_;
-  uint64_t decode_buffer_len_; 
-  /**
-   * *_headers_only_ represents whether the request has any payload or is just headers.
-   */
-  bool encode_headers_only_;
-  bool decode_headers_only_;
-  /**
-   * *_headers_ are the headers of the respective requests
-   */
-  Http::HeaderMap* encode_headers_;
-  Http::HeaderMap* decode_headers_;
-  /**
-   * *_entered_tp_ are the timestamps of when the message entered the queue
-   */
-  std::chrono::system_clock::time_point decode_entered_tp_;
-  std::chrono::system_clock::time_point encode_entered_tp_;
 
-  /**
-   * *_exited_tp_ are the timestamps of when the message exited the queue
-   */
-  std::chrono::system_clock::time_point decode_exited_tp_;
-  std::chrono::system_clock::time_point encode_exited_tp_;
-
-  /**
-   * *_dropped_ represents whether our request was dropped from the queue
-   */ 
-  bool decode_dropped_{};
-  bool encode_dropped_{};
+  MessageSharedPtr request_;
+  MessageSharedPtr response_;
 };
 
 

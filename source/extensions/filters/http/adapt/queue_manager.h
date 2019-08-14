@@ -36,26 +36,14 @@ public:
   void AddDropAdaptation(std::string type, uint64_t n, uint64_t queue_length);
 
   /**
-   * Create a new request and add it to the encoding queue.
-   * @param callbacks The callbacks for this filter
-   * @param size The size of the requests
-   * @param headers_only True if request has no body, False otherwise
-   * @param headers The headers of the request
+   * Add a new message to the encoding queue.
    */
-  void AddEncoderToQueue(Http::StreamEncoderFilterCallbacks* callbacks, uint64_t size,
-                         bool headers_only, const Http::HeaderMap& headers, bool& dropped,
-                         std::chrono::system_clock::time_point& tp);
+  void AddEncoderToQueue(MessageSharedPtr m);
 
   /**
-   * Create a new request and add it to the decoding queue.
-   * @param callbacks The callbacks for this filter
-   * @param size The size of the requests
-   * @param headers_only True if request has no body, False otherwise
-   * @param headers The headers of the request
+   * Add a new message to the decoding queue.
    */
-  void AddDecoderToQueue(Http::StreamDecoderFilterCallbacks* callbacks, uint64_t size,
-                         bool headers_only, const Http::HeaderMap& headers, bool &dropped,
-                         std::chrono::system_clock::time_point& tp);
+  void AddDecoderToQueue(MessageSharedPtr m);
 
 protected:
   QueueManager();

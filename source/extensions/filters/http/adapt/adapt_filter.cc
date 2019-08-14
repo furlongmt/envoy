@@ -37,7 +37,7 @@ InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& 
 }
 
 Adapt::Adapt(ConfigSharedPtr config)
-    : config_(config), encode_buffer_len_(0), decode_buffer_len_(0) {
+    : config_(config) {
       ENVOY_LOG(trace, "New adapt filter created.");
 }
 
@@ -47,33 +47,33 @@ Adapt::~Adapt() { ENVOY_LOG(trace, "Cleaning up adapt filter."); }
 // When the filter is destroyed, we know that the request has left the queue
 void Adapt::onDestroy() {
 #ifdef DECODE
-  if (decode_buffer_len_ > 0) {
+  if (request_->size_ > 0) {
      config_->stats().request_queue_size_.dec();
   }
-  config_->stats().bytes_in_request_queue_.sub(decode_buffer_len_);
+  config_->stats().bytes_in_request_queue_.sub(request_->size_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> decode_time_span = decode_exited_tp_ - decode_entered_tp_;
+  std::chrono::duration<double, std::milli> decode_time_span = request_->exited_tp_ - request_->entered_tp_;
   ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
-  if (!decode_dropped_ && decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
-    config_->stats().request_bytes_made_dl_.add(decode_buffer_len_);
+  if (!request_->dropped_ && decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
+    config_->stats().request_bytes_made_dl_.add(request_->size_);
   }
-  if (!decode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
-    config_->stats().request_total_bytes_sent_.add(decode_buffer_len_);
+  if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
+    config_->stats().request_total_bytes_sent_.add(request_->size_);
   }
 #endif
 #ifdef ENCODE
-  if (encode_buffer_len_ > 0) {
+  if (response_->size_ > 0) {
     config_->stats().response_queue_size_.dec();
   }
-  config_->stats().bytes_in_response_queue_.sub(encode_buffer_len_);
+  config_->stats().bytes_in_response_queue_.sub(response_->size_);
   // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> encode_time_span = encode_exited_tp_ - encode_entered_tp_; 
+  std::chrono::duration<double, std::milli> encode_time_span = response_->exited_tp_ - response_->entered_tp_; 
   ENVOY_LOG(critical, "Response was in queue for {}ms, deadline is {}ms", encode_time_span.count(), config_->settings()->get_encode_deadline());
-  if (!encode_dropped_ && encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
-    config_->stats().response_bytes_made_dl_.add(encode_buffer_len_);
+  if (!response_->dropped_ && encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
+    config_->stats().response_bytes_made_dl_.add(response_->size_);
   }
-  if (!encode_dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
-    config_->stats().response_total_bytes_sent_.add(encode_buffer_len_);
+  if (!response_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
+    config_->stats().response_total_bytes_sent_.add(response_->size_);
   }
 #endif
   ENVOY_LOG(trace, "Adapt filter onDestroy()");
@@ -81,9 +81,10 @@ void Adapt::onDestroy() {
 
 #ifdef DECODE
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
-  decode_headers_only_ = end_stream;
-  decode_headers_ = &headers;
-  decode_buffer_len_ += headers.size();
+  request_ = std::make_shared<Message>(decoder_callbacks_, headers);
+  request_->headers_only_ = end_stream;
+  request_->size_ += headers.size();
+
   ENVOY_LOG(trace, "Stop iterating when decoding headers {}, end_stream={}", headers,
         end_stream);
   return Http::FilterHeadersStatus::StopIteration;
@@ -97,7 +98,7 @@ Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap&, bool) {
 #ifdef DECODE
 Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool) {
   ENVOY_LOG(trace, "Writing {} bytes to buffer.", data.length());
-  decode_buffer_len_ += data.length();
+  request_->size_ += data.length();
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
 #else
@@ -114,21 +115,19 @@ Http::FilterTrailersStatus Adapt::decodeTrailers(Http::HeaderMap&) {
 
 void Adapt::decodeComplete() {
 #ifdef DECODE
-  ENVOY_LOG(trace, "Decoding complete, inserting {} bytes into queue", decode_buffer_len_);
+  ENVOY_LOG(trace, "Decoding complete, inserting {} bytes into queue", request_->size_);
   config_->stats().request_queue_size_.inc();
-  config_->stats().bytes_in_request_queue_.add(decode_buffer_len_);
-  decode_entered_tp_ = std::chrono::system_clock::now();
-  QueueManager::Instance().AddDecoderToQueue(decoder_callbacks_, decode_buffer_len_,
-                                             decode_headers_only_, *decode_headers_, decode_dropped_,
-                                             decode_exited_tp_);
+  config_->stats().bytes_in_request_queue_.add(request_->size_);
+  request_->entered_tp_ = std::chrono::system_clock::now();
+  QueueManager::Instance().AddDecoderToQueue(request_);
 #endif
 }
 
 #ifdef ENCODE
 Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap& headers, bool end_stream) {
-  encode_headers_only_ = end_stream;
-  encode_headers_ = &headers;
-  encode_buffer_len_ += headers.size();
+  response_ = std::make_shared<Message>(encoder_callbacks_, headers);
+  response_->headers_only_ = end_stream;
+  response_->size_ += headers.size();
   ENVOY_LOG(trace, "Stop iterating when encoding headers {}", headers);
   return Http::FilterHeadersStatus::StopIteration;
 }
@@ -141,7 +140,7 @@ Http::FilterHeadersStatus Adapt::encodeHeaders(Http::HeaderMap&, bool) {
 #ifdef ENCODE
 Http::FilterDataStatus Adapt::encodeData(Buffer::Instance& data, bool) {
   ENVOY_LOG(trace, "Writing {} bytes to buffer in encode.", data.length());
-  encode_buffer_len_ += data.length();
+  response_->size_ += data.length();
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
 #else
@@ -159,12 +158,10 @@ Http::FilterTrailersStatus Adapt::encodeTrailers(Http::HeaderMap&) {
 void Adapt::encodeComplete() {
 #ifdef ENCODE
   config_->stats().response_queue_size_.inc();
-  config_->stats().bytes_in_response_queue_.add(encode_buffer_len_);
-  encode_entered_tp_ = std::chrono::system_clock::now();
-  ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", encode_buffer_len_);
-  QueueManager::Instance().AddEncoderToQueue(encoder_callbacks_, encode_buffer_len_,
-                                             encode_headers_only_, *encode_headers_, encode_dropped_,
-                                             encode_exited_tp_);
+  config_->stats().bytes_in_response_queue_.add(response_->size_);
+  response_->entered_tp_ = std::chrono::system_clock::now();
+  ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", response_->size_);
+  QueueManager::Instance().AddEncoderToQueue(response_);
 #endif
 }
 

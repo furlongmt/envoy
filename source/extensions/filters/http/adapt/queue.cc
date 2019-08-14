@@ -44,8 +44,8 @@ void Queue::Push(MessageSharedPtr req) {
   std::lock_guard<std::mutex> lck(mtx_);
   queue_.push_back(req);
   transform_set_.insert(req);
-  bytes_in_q_ += req->size();
-  ENVOY_LOG(trace, "limiter: adding request with size {}, new queue size in bytes = {}", req->size(), bytes_in_q_);
+  bytes_in_q_ += req->size_;
+  ENVOY_LOG(trace, "limiter: adding request with size {}, new queue size in bytes = {}", req->size_, bytes_in_q_);
   if (!encode_) // TODO: just for demo
     std::cout << "Queue size: " << queue_.size() << std::endl;
   // Potentially adapt queue when we add a new request
@@ -62,9 +62,9 @@ void Queue::pop() {
   MessageSharedPtr req = queue_.front();
   ENVOY_LOG(trace, "limiter: popping request from queue");
   queue_.pop_front();
-  bytes_in_q_ -= req->size();
+  bytes_in_q_ -= req->size_;
   transform_set_.erase(req);
-  req->set_exited_tp(std::chrono::system_clock::now()); // When popped from the queue, set our timestamp since we're not dropped
+  req->exited_tp_  = std::chrono::system_clock::now(); // When popped from the queue, set our timestamp since we're not dropped
 }
 
 std::chrono::milliseconds Queue::DrainRequest() {
@@ -109,17 +109,17 @@ std::chrono::milliseconds Queue::DrainRequest() {
 
   uint64_t tokens_needed = 0;
   MessageSharedPtr req = queue_.front();
-  uint64_t request_size = req->size();
+  uint64_t request_size = req->size_;
 
   ENVOY_LOG(trace, "limiter: request size = {}", request_size);
 
   tokens_needed = (request_size + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
   const uint64_t tokens_obtained = token_bucket_.consume(tokens_needed, false);
 
-  // TODO: I can't remember why I have this req->headers_only()
-  if (tokens_obtained != 0 || req->headers_only()) {
+  // TODO: I can't remember why I have this req->headers_only_
+  if (tokens_obtained != 0 || req->headers_only_) {
     // Sanity check that we have obtained the number of tokens that we need
-    ASSERT(tokens_needed == tokens_obtained || req->headers_only());
+    ASSERT(tokens_needed == tokens_obtained || req->headers_only_);
 
     ENVOY_LOG(critical, "limiter: sending {} bytes from queue", request_size);
 
@@ -130,17 +130,17 @@ std::chrono::milliseconds Queue::DrainRequest() {
      * attempt to handle a connection entirely on on thread, but it seems to work well enough. 
      */
     if (encode_) {
-      Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
+      Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks_;
       // A sanity check that this request is for an encoded response
       ASSERT(cb != nullptr);
-      req->dispatcher().post(
+      req->dispatcher_.post(
           [cb] { cb->continueEncoding(); }); 
     } else {
-      Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
+      Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks_;
       // A sanity check that this request is for a decoded request
       ASSERT(cb != nullptr);
       try {
-        req->dispatcher().post([cb] {
+        req->dispatcher_.post([cb] {
           // DEMO: remove below here after demo
           // Modify all requests to redirect them to our cloud service
           /*std::function<void(Http::HeaderMap&)> head_f = [](Http::HeaderMap& headers) {
@@ -165,7 +165,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
 
     // We need to reset the tokens needed to the tokens needed for our next request in the queue
     if (!queue_.empty()) {
-      tokens_needed = (queue_.front()->size() + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
+      tokens_needed = (queue_.front()->size_ + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
     } else {
       // Since our queue is empty, returning 0 should cause us to immediately re-enter this function
       // but we'll wait on our cv until something new is added to the queue
@@ -227,18 +227,14 @@ void Queue::transform(std::function<void(Buffer::Instance&)> buf_func,
                       std::function<void(Http::HeaderMap&)> header_func) {
 
   for (MessageSharedPtr req : transform_set_) {
-    if (!req->adapted()) { // We don't want to transform the same request twice (this is somewhat redundant since we're using the transform_set)
-      // We can modify both the payload and the headers (e.g. content-length) for each request
-      if (encode_) {
-        Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks();
-        cb->modifyEncodingBuffer(buf_func);
-        cb->modifyEncodingHeaders(header_func);
-      } else {
-        Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
-        cb->modifyDecodingBuffer(buf_func);
-        cb->modifyDecodingHeaders(header_func);
-      }
-      req->set_adapted(true);
+    if (encode_) {
+      Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks_;
+      cb->modifyEncodingBuffer(buf_func);
+      cb->modifyEncodingHeaders(header_func);
+    } else {
+      Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks_;
+      cb->modifyDecodingBuffer(buf_func);
+      cb->modifyDecodingHeaders(header_func);
     }
   }
   ENVOY_LOG(critical, "Finished queue transformation, adapted {} responses", transform_set_.size());
@@ -266,25 +262,25 @@ std::list<MessageSharedPtr>::iterator Queue::drop(std::list<MessageSharedPtr>::i
         cb->sendLocalReply(Http::Code::TooManyRequests, "", nullptr, absl::nullopt);
       });
     }*/
-    Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks();
+    Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks_;
     ASSERT(cb != nullptr);
-    req->dispatcher().post([cb] {
+    req->dispatcher_.post([cb] {
       //cb->streamInfo().setResponseFlag(StreamInfo::ResponseFlag::FaultInjected);
       ASSERT(cb != nullptr);
       ASSERT(cb->connection()->state() == Network::Connection::State::Open);
       cb->sendLocalReply(Http::Code::TooManyRequests, "", nullptr, absl::nullopt);
     }); 
 
-    ENVOY_LOG(critical, "Dropping request of size {}", req->size());
+    ENVOY_LOG(critical, "Dropping request of size {}", req->size_);
 
-    bytes_in_q_ -= req->size();
+    bytes_in_q_ -= req->size_;
 
     // We need to also erase it from out adapt set
     transform_set_.erase(req);
 
 
     // Set this message to dropped
-    req->set_dropped(true);
+    req->dropped_ = true;
 
     return queue_.erase(it);
 }
@@ -322,7 +318,7 @@ void Queue::drop_large_messages(uint64_t size) {
   auto it = queue_.begin();
   while (it != queue_.end()) {
     ASSERT(*it != nullptr);
-    if ((*it)->size() >= size) {
+    if ((*it)->size_ >= size) {
       it = drop(it);
       dropped_msgs++;
     } else {
@@ -340,7 +336,7 @@ void Queue::drop_messages_to_url(absl::string_view url) {
   auto it = queue_.begin();
   while (it != queue_.end()) {
     ASSERT(*it != nullptr);
-    const Http::HeaderMap& headers = (*it)->headers();
+    const Http::HeaderMap& headers = (*it)->headers_;
     if (headers.Host() && headers.Host()->value().getStringView() == url) {
       it = drop(it);
     } else {
