@@ -30,6 +30,14 @@ public:
   void AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length);
 
   /**
+   * Add a new redirect adaption to this queue
+   * @param orig_host The host that this request was originally sent to
+   * @param ip_to The ip address that we should redirect our request to
+   * @param queue_length Minimum queue length before we redirect messages
+   */
+  void AddRedirectStrategy(std::string orig_host, std::string ip_to, uint64_t queue_length);
+
+  /**
    * Add a new request to the end of our queue and update the appropriate
    * state (e.g. bytes_in_q_)  and adapt our queue if necessary
    * @param req The request to be added to the back of the queue
@@ -68,6 +76,19 @@ private:
   };
 
   typedef std::shared_ptr<DropperConfig> DropperConfigSharedPtr;
+
+  /**
+   * This struct should match the parameters that we provide via our 
+   * request config api. 
+   */
+  struct RedirectConfig {
+    RedirectConfig(std::string ip, uint64_t thresh) : to_ip(ip), threshold(thresh) {}
+
+    std::string to_ip;
+    uint64_t threshold;
+  };
+
+  typedef std::shared_ptr<RedirectConfig> RedirectConfigSharedPtr;
 
   /**
    * Checks to see if the queue requires any adaptations
@@ -150,6 +171,9 @@ private:
   TokenBucketImpl token_bucket_;
   std::list<MessageSharedPtr> queue_;
   std::unordered_set<MessageSharedPtr> transform_set_;
+
+  // orig_host -> RedirectConfig
+  std::unordered_map<std::string, RedirectConfigSharedPtr> redirects_;
 
   // type -> DropperConfig
   std::unordered_map<std::string, DropperConfigSharedPtr> droppers_;

@@ -48,6 +48,14 @@ void AdaptFilterFactory::translateHttpAdaptFilter(
     JSON_NON_MUTABLE_SET_INTEGER(*drop_entry, *drop_request, value);
     JSON_NON_MUTABLE_SET_INTEGER(*drop_entry, *drop_request, queue_length);
   }
+
+  for (const Json::ObjectSharedPtr& redirect_entry : json_config.getObjectArray("redirect_requests")) {
+    envoy::config::filter::http::adapt::v2::AdaptRateLimit::RedirectRequests* redirect_request =
+        proto_config.mutable_redirect_requests()->Add();
+    JSON_UTIL_SET_STRING(*redirect_entry, *redirect_request, orig_host);
+    JSON_UTIL_SET_STRING(*redirect_entry, *redirect_request, to_ip);
+    JSON_NON_MUTABLE_SET_INTEGER(*redirect_entry, *redirect_request, queue_length);
+  }
 }
 
 Http::FilterFactoryCb

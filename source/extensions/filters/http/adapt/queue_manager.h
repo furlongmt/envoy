@@ -36,6 +36,11 @@ public:
   void AddDropAdaptation(std::string type, uint64_t n, uint64_t queue_length);
 
   /**
+   * Add a new redirect adaptation strategy when the config file for this filter changes. 
+   */
+  void AddRedirectAdaptation(std::string orig_host, std::string to_ip, uint64_t queue_length);
+
+  /**
    * Add a new message to the encoding queue.
    */
   void AddEncoderToQueue(MessageSharedPtr m);

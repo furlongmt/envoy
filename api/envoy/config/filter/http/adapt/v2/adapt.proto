@@ -27,4 +27,12 @@ message AdaptRateLimit {
   }
 
   repeated DropRequests drop_requests = 5;
+
+  message RedirectRequests {
+    string orig_host = 1 [(validate.rules).string.min_bytes = 1];
+    string to_ip = 2 [(validate.rules).string.min_bytes = 1];
+    uint64 queue_length = 3 [(validate.rules).uint64.gte = 0];
+  }
+
+  repeated RedirectRequests redirect_requests = 6;
 }

@@ -1,4 +1,5 @@
 
+#include "common/http/headers.h"
 #include "extensions/filters/http/adapt/queue.h"
 
 namespace Envoy {
@@ -38,6 +39,11 @@ void Queue::set_max_kbps(uint64_t max_kbps) {
 void Queue::AddDropStrategy(std::string type, uint64_t n, uint64_t queue_length) {
   DropperConfigSharedPtr dropper = std::make_shared<DropperConfig>(n, queue_length);
   droppers_[type] = dropper;
+}
+
+void Queue::AddRedirectStrategy(std::string orig_host, std::string ip_to, uint64_t queue_length) {
+  RedirectConfigSharedPtr redirect = std::make_shared<RedirectConfig>(ip_to, queue_length);
+  redirects_[orig_host] = redirect;
 }
 
 void Queue::Push(MessageSharedPtr req) {
@@ -141,21 +147,8 @@ std::chrono::milliseconds Queue::DrainRequest() {
       ASSERT(cb != nullptr);
       try {
         req->dispatcher_.post([cb] {
-          // DEMO: remove below here after demo
-          // Modify all requests to redirect them to our cloud service
-          /*std::function<void(Http::HeaderMap&)> head_f = [](Http::HeaderMap& headers) {
-            if (headers.Host()) {
-              //headers.insertEnvoyOriginalUrl().value(
-                  //absl::StrCat("http://", headers.Host()->value().getStringView(),
-                               //headers.Path()->value().getStringView()));
-              headers.insertHost().value(std::string("10.170.69.147:5001"));
-              headers.insertEnvoyDecoratorOperation().value(std::string("10.170.69.147:5001"));
-              ENVOY_LOG(critical, "Changed host headers to {}", headers);
-            }
-          };
-          cb->modifyDecodingHeaders(head_f);*/
-          cb->continueDecoding();
-        });           // allow the filter to continue passing data
+          cb->continueDecoding(); // Allow the filter to continue passing data
+        });
       } catch (...) { // TODO: this is dangerous
         ENVOY_LOG(error, "Exception when continuing decoding...");
       }
@@ -195,6 +188,33 @@ void Queue::adapt_queue() {
     };
     std::function<void(Buffer::Instance&)> buf_f = [s](Buffer::Instance& buf) { buf.add(s); };
     transform(buf_f, header_f);
+  }
+
+  /**
+   * Iterate through all of our redirect configurations and apply redirect strategy if applicable
+   */
+  for (auto redirect : redirects_) {
+    if (queue_.size() >= redirect.second->threshold) {
+      for (auto req = queue_.begin(); req != queue_.end(); req++) {
+        // If the host == orig_host
+        if ((*req)->headers_.Host() &&
+            (*req)->headers_.Host()->value().getStringView() == redirect.first) {
+          Http::StreamDecoderFilterCallbacks* cb = (*req)->decoder_callbacks_;
+
+          // Modify all requests to redirect them to our cloud service
+          std::function<void(Http::HeaderMap&)> head_f = [redirect](Http::HeaderMap& headers) {
+            // This line is what allows envoy to currently redirect requests properly
+            headers.addCopy(Http::Headers::get().EnvoyOriginalDstHost,
+                            redirect.second->to_ip);
+            headers.insertHost().value(redirect.second->to_ip);
+                
+            ENVOY_LOG(critical, "Changed host headers to {}", headers);
+          };
+          cb->modifyDecodingHeaders(head_f);
+          cb->clearRouteCache(); // If we modify the headers, we must clear the route cache
+        }
+      }
+    }
   }
 
   /**

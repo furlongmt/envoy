@@ -49,7 +49,7 @@ HostConstSharedPtr OriginalDstCluster::LoadBalancer::chooseHost(LoadBalancerCont
 
     // Check if override host header is present, if yes use it otherwise check local address.
     Network::Address::InstanceConstSharedPtr dst_host = nullptr;
-    if (use_http_header_) {
+    if (use_http_header_ || true) { // MATT F ADDED THE || true (ideally we should change the config but this is a quick hack)
       dst_host = requestOverrideHost(context);
     }
     if (dst_host == nullptr) {

@@ -16,9 +16,15 @@ namespace AdaptFilter {
 AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config) {
   QueueManager::Instance().SetDecodeMaxKbps(config.decode_limit_kbps());
   QueueManager::Instance().SetEncodeMaxKbps(config.encode_limit_kbps());
-  for (const envoy::config::filter::http::adapt::v2::AdaptRateLimit_DropRequests& drop_request : config.drop_requests()) {
+  for (const envoy::config::filter::http::adapt::v2::AdaptRateLimit_DropRequests& drop_request :
+       config.drop_requests()) {
     QueueManager::Instance().AddDropAdaptation(drop_request.type(), drop_request.value(),
                                                drop_request.queue_length());
+  }
+  for (const envoy::config::filter::http::adapt::v2::AdaptRateLimit_RedirectRequests&
+           redirect_request : config.redirect_requests()) {
+    QueueManager::Instance().AddRedirectAdaptation(
+        redirect_request.orig_host(), redirect_request.to_ip(), redirect_request.queue_length());
   }
   decode_deadline = config.decode_deadline();
   encode_deadline = config.encode_deadline();
@@ -82,7 +88,7 @@ void Adapt::onDestroy() {
     config_->stats().responses_dropped_.inc();
   }
 #endif
-  ENVOY_LOG(trace, "Adapt filter onDestroy()");
+  ENVOY_LOG(critical, "Adapt filter onDestroy()");
 }
 
 #ifdef DECODE
@@ -91,7 +97,7 @@ Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool en
   request_->headers_only_ = end_stream;
   request_->size_ += headers.size();
 
-  ENVOY_LOG(trace, "Stop iterating when decoding headers {}, end_stream={}", headers,
+  ENVOY_LOG(critical, "Stop iterating when decoding headers {}, end_stream={}", headers,
         end_stream);
   return Http::FilterHeadersStatus::StopIteration;
 }

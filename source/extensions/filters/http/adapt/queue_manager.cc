@@ -43,6 +43,10 @@ void QueueManager::AddDropAdaptation(std::string type, uint64_t n, uint64_t queu
   ENVOY_LOG(critical, "Set drop type {} to {} when queue_length = {}", type, n, queue_length);
 }
 
+void QueueManager::AddRedirectAdaptation(std::string orig_host, std::string to_ip, uint64_t queue_length) {
+  decode_q_.AddRedirectStrategy(orig_host, to_ip, queue_length);
+}
+
 void QueueManager::AddEncoderToQueue(MessageSharedPtr m) {
   encode_q_.Push(m);
 }
