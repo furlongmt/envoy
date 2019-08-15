@@ -69,9 +69,6 @@ void Adapt::onDestroy() {
   if (request_->dropped_) {
     config_->stats().requests_dropped_.inc();
   }
-  if (decode_dropped_) {
-    config_->stats().requests_dropped_.inc();
-  }
 #endif
 #ifdef ENCODE
   if (response_->size_ > 0) {
@@ -88,9 +85,6 @@ void Adapt::onDestroy() {
     config_->stats().response_total_bytes_sent_.add(response_->size_);
   }
   if (response_->dropped_) {
-    config_->stats().responses_dropped_.inc();
-  }
-  if (encode_dropped_ ){
     config_->stats().responses_dropped_.inc();
   }
 #endif
@@ -136,6 +130,7 @@ void Adapt::decodeComplete() {
   ENVOY_LOG(trace, "Decoding complete, inserting {} bytes into queue", request_->size_);
   config_->stats().request_queue_size_.inc();
   config_->stats().bytes_in_request_queue_.add(request_->size_);
+  config_->stats().request_input_bytes_.add(request_->size_);
   request_->entered_tp_ = std::chrono::system_clock::now();
   QueueManager::Instance().AddDecoderToQueue(request_);
 #endif
@@ -177,6 +172,7 @@ void Adapt::encodeComplete() {
 #ifdef ENCODE
   config_->stats().response_queue_size_.inc();
   config_->stats().bytes_in_response_queue_.add(response_->size_);
+  config_->stats().response_input_bytes_.add(response_->size_);
   response_->entered_tp_ = std::chrono::system_clock::now();
   ENVOY_LOG(critical, "Encoding complete, inserting {} bytes into queue", response_->size_);
   QueueManager::Instance().AddEncoderToQueue(response_);

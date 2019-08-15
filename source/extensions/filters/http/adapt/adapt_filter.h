@@ -32,7 +32,9 @@ namespace AdaptFilter {
   GAUGE(bytes_in_request_queue)                    \
   GAUGE(bytes_in_response_queue)                   \
   COUNTER(requests_dropped)                        \
-  COUNTER(responses_dropped)
+  COUNTER(responses_dropped)                       \
+  COUNTER(request_input_bytes)                     \
+  COUNTER(response_input_bytes)
 
 /*
  * Struct defintion for all adapt stats. @see stats_macros.h
