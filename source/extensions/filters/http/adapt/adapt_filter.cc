@@ -69,6 +69,9 @@ void Adapt::onDestroy() {
   if (request_->dropped_) {
     config_->stats().requests_dropped_.inc();
   }
+  if (decode_dropped_) {
+    config_->stats().requests_dropped_.inc();
+  }
 #endif
 #ifdef ENCODE
   if (response_->size_ > 0) {
@@ -85,6 +88,9 @@ void Adapt::onDestroy() {
     config_->stats().response_total_bytes_sent_.add(response_->size_);
   }
   if (response_->dropped_) {
+    config_->stats().responses_dropped_.inc();
+  }
+  if (encode_dropped_ ){
     config_->stats().responses_dropped_.inc();
   }
 #endif
