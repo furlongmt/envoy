@@ -58,6 +58,8 @@ public:
    */
   std::chrono::milliseconds DrainRequest();
 
+  bool FindInQueue(MessageSharedPtr m);
+
   /**
    * Set the maximum bandwidth in Kilobytes Per Second for the queue
    */
@@ -154,10 +156,10 @@ private:
   // DEMO: also just for demo...
   uint64_t cloud_threshold_;
 
-  // We currently divide each second into 16 segments for the token bucket. Thus, the rate limit
-  // is KiB per second, divided into 16 segments, ~63ms apart. 16 is used because it divides
+  // We currently divide each second into 1024 segments for the token bucket. Thus, the rate limit
+  // is KiB per second, divided into 1024 segments, ~1ms apart. 1024 is used because it divides
   // into 1024 evenly.
-  const uint64_t SecondDivisor = 16;
+  const uint64_t SecondDivisor = 1024;
   const uint64_t MaxTokens = 10000; // This number is completely random
 
   static RealTimeSource time_source_;

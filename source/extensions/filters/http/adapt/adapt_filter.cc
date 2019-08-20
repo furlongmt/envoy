@@ -52,44 +52,58 @@ Adapt::~Adapt() { ENVOY_LOG(trace, "Cleaning up adapt filter."); }
 // TODO: this may be a bit hacky...
 // When the filter is destroyed, we know that the request has left the queue
 void Adapt::onDestroy() {
+
 #ifdef DECODE
-  if (request_->size_ > 0) {
-     config_->stats().request_queue_size_.dec();
-  }
-  config_->stats().bytes_in_request_queue_.sub(request_->size_);
-  // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> decode_time_span = request_->exited_tp_ - request_->entered_tp_;
-  ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
-  if (!request_->dropped_ && decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
-    config_->stats().request_bytes_made_dl_.add(request_->size_);
-  }
-  if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
-    config_->stats().request_total_bytes_sent_.add(request_->size_);
-  }
-  if (request_->dropped_) {
-    config_->stats().requests_dropped_.inc();
+  if (request_ != nullptr) {
+    ASSERT(QueueManager::Instance().MessageInDecoderQueue(request_) == false);
+    if (request_->size_ > 0) {
+      config_->stats().request_queue_size_.dec();
+    }
+    config_->stats().bytes_in_request_queue_.sub(request_->size_);
+    // Check to see if we made our deadline
+    std::chrono::duration<double, std::milli> decode_time_span =
+        request_->exited_tp_ - request_->entered_tp_;
+    ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
+    if (!request_->dropped_ &&
+        decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
+      config_->stats().request_bytes_made_dl_.add(request_->size_);
+    }
+    if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our
+                               // bytes sent
+      config_->stats().request_total_bytes_sent_.add(request_->size_);
+    }
+    if (request_->dropped_) {
+      config_->stats().requests_dropped_.inc();
+    }
   }
 #endif
 #ifdef ENCODE
-  if (response_->size_ > 0) {
-    config_->stats().response_queue_size_.dec();
-  }
-  config_->stats().bytes_in_response_queue_.sub(response_->size_);
-  // Check to see if we made our deadline
-  std::chrono::duration<double, std::milli> encode_time_span = response_->exited_tp_ - response_->entered_tp_; 
-  ENVOY_LOG(critical, "Response was in queue for {}ms, deadline is {}ms", encode_time_span.count(), config_->settings()->get_encode_deadline());
-  if (!response_->dropped_ && encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
-    config_->stats().response_bytes_made_dl_.add(response_->size_);
-  }
-  if (!response_->dropped_) { // If the request wasn't dropped, than include this message in our bytes sent
-    config_->stats().response_total_bytes_sent_.add(response_->size_);
-  }
-  if (response_->dropped_) {
-    config_->stats().responses_dropped_.inc();
+  if (response_ != nullptr) {
+    ASSERT(QueueManager::Instance().MessageInEncoderQueue(response_) == false);
+    if (response_->size_ > 0) {
+      config_->stats().response_queue_size_.dec();
+    }
+    config_->stats().bytes_in_response_queue_.sub(response_->size_);
+    // Check to see if we made our deadline
+    std::chrono::duration<double, std::milli> encode_time_span =
+        response_->exited_tp_ - response_->entered_tp_;
+    ENVOY_LOG(critical, "Response was in queue for {}ms, deadline is {}ms",
+              encode_time_span.count(), config_->settings()->get_encode_deadline());
+    if (!response_->dropped_ &&
+        encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
+      config_->stats().response_bytes_made_dl_.add(response_->size_);
+    }
+    if (!response_->dropped_) { // If the request wasn't dropped, than include this message in our
+                                // bytes sent
+      config_->stats().response_total_bytes_sent_.add(response_->size_);
+    }
+    if (response_->dropped_) {
+      config_->stats().responses_dropped_.inc();
+    }
   }
 #endif
   ENVOY_LOG(critical, "Adapt filter onDestroy()");
-}
+} // namespace AdaptFilter
 
 #ifdef DECODE
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
@@ -98,7 +112,7 @@ Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool en
   request_->size_ += headers.size();
 
   ENVOY_LOG(critical, "Stop iterating when decoding headers {}, end_stream={}", headers,
-        end_stream);
+            end_stream);
   return Http::FilterHeadersStatus::StopIteration;
 }
 #else

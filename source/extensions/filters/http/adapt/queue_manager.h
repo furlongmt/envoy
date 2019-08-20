@@ -40,6 +40,9 @@ public:
    */
   void AddRedirectAdaptation(std::string orig_host, std::string to_ip, uint64_t queue_length);
 
+  bool MessageInDecoderQueue(MessageSharedPtr m);
+  bool MessageInEncoderQueue(MessageSharedPtr m);
+
   /**
    * Add a new message to the encoding queue.
    */

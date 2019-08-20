@@ -47,9 +47,10 @@ void QueueManager::AddRedirectAdaptation(std::string orig_host, std::string to_i
   decode_q_.AddRedirectStrategy(orig_host, to_ip, queue_length);
 }
 
-void QueueManager::AddEncoderToQueue(MessageSharedPtr m) {
-  encode_q_.Push(m);
-}
+bool QueueManager::MessageInDecoderQueue(MessageSharedPtr m) { return decode_q_.FindInQueue(m); }
+bool QueueManager::MessageInEncoderQueue(MessageSharedPtr m) { return encode_q_.FindInQueue(m); }
+
+void QueueManager::AddEncoderToQueue(MessageSharedPtr m) { encode_q_.Push(m); }
 
 void QueueManager::AddDecoderToQueue(MessageSharedPtr m) {
   decode_q_.Push(m);

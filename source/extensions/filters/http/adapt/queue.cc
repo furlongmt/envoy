@@ -33,6 +33,8 @@ void Queue::set_max_kbps(uint64_t max_kbps) {
   if (max_kbps != max_kbps_) {
     max_kbps_ = max_kbps;
     bytes_per_time_slice_ = ((max_kbps_ * 1024) / SecondDivisor);
+    // I think we should also reset the token bucket here but I haven't tested this yet
+    // token_bucket_.reset(1);
   }
 }
 
@@ -83,7 +85,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
     // e.g. if we don't have requests for awhile, we will build up a lot of tokens
     // and attempt to send all of this data at once...
     saw_data_ = false;
-  }
+  } 
 
   // Wait while our queue is empty
   cv_.wait(lck, [&] { return !queue_.empty(); });
@@ -109,6 +111,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
 
   // The first time we see data we should reset the token bucket to have just a single token
   if (!saw_data_) {
+    ENVOY_LOG(critical, "Resetting token bucket...");
     token_bucket_.reset(1);
     saw_data_ = true;
   }
@@ -139,19 +142,28 @@ std::chrono::milliseconds Queue::DrainRequest() {
       Http::StreamEncoderFilterCallbacks* cb = req->encoder_callbacks_;
       // A sanity check that this request is for an encoded response
       ASSERT(cb != nullptr);
-      req->dispatcher_.post(
-          [cb] { cb->continueEncoding(); }); 
+      req->dispatcher_.post([cb] {
+        try {
+          ASSERT(cb != nullptr);
+          //ENVOY_LOG(critical, "Network state: {}", cb->connection()->state());
+          cb->continueEncoding();
+        } catch (...) { // TODO: This seems dangerous
+          ENVOY_LOG(error, "Exception when continuing encoding...");
+        }
+      });
     } else {
       Http::StreamDecoderFilterCallbacks* cb = req->decoder_callbacks_;
       // A sanity check that this request is for a decoded request
       ASSERT(cb != nullptr);
-      try {
-        req->dispatcher_.post([cb] {
+      req->dispatcher_.post([cb] {
+        try {
+          ASSERT(cb != nullptr);
+          //ENVOY_LOG(critical, "Network state: {}", cb->connection()->state());
           cb->continueDecoding(); // Allow the filter to continue passing data
-        });
-      } catch (...) { // TODO: this is dangerous
-        ENVOY_LOG(error, "Exception when continuing decoding...");
-      }
+        } catch (...) { // TODO: this seems dangerous
+          ENVOY_LOG(error, "Exception when continuing decoding...");
+        }
+      });
     }
 
     pop(); // Remove the request that we just sent
@@ -364,6 +376,11 @@ void Queue::drop_messages_to_url(absl::string_view url) {
     }
   }
 
+}
+
+bool Queue::FindInQueue(MessageSharedPtr m) {
+  std::unique_lock<std::mutex> lck(mtx_);
+  return find(queue_.begin(), queue_.end(), m) != queue_.end();
 }
 
 } // namespace AdaptFilter
