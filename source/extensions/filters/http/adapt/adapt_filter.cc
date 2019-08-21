@@ -4,6 +4,7 @@
 #include "envoy/network/connection.h"
 
 #include "common/common/assert.h"
+#include "extensions/filters/http/well_known_names.h"
 
 #define DECODE
 #define ENCODE
@@ -65,7 +66,7 @@ void Adapt::onDestroy() {
         request_->exited_tp_ - request_->entered_tp_;
     ENVOY_LOG(critical, "Request was in queue for {}ms", decode_time_span.count());
     if (!request_->dropped_ &&
-        decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
+        decode_time_span.count() <= adapt_settings_->get_decode_deadline()) {
       config_->stats().request_bytes_made_dl_.add(request_->size_);
     }
     if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our
@@ -88,9 +89,9 @@ void Adapt::onDestroy() {
     std::chrono::duration<double, std::milli> encode_time_span =
         response_->exited_tp_ - response_->entered_tp_;
     ENVOY_LOG(critical, "Response was in queue for {}ms, deadline is {}ms",
-              encode_time_span.count(), config_->settings()->get_encode_deadline());
+              encode_time_span.count(), adapt_settings_->get_encode_deadline());
     if (!response_->dropped_ &&
-        encode_time_span.count() <= config_->settings()->get_encode_deadline()) {
+        encode_time_span.count() <= adapt_settings_->get_encode_deadline()) {
       config_->stats().response_bytes_made_dl_.add(response_->size_);
     }
     if (!response_->dropped_) { // If the request wasn't dropped, than include this message in our
@@ -103,10 +104,29 @@ void Adapt::onDestroy() {
   }
 #endif
   ENVOY_LOG(critical, "Adapt filter onDestroy()");
-} // namespace AdaptFilter
+} 
 
 #ifdef DECODE
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
+
+  // Route-level configuration overrides global configuration
+  adapt_settings_ = config_->settings();
+  /**
+   * TODO: this currently only changes the deadline since everything else is passed to the global config
+   */
+  if (decoder_callbacks_->route() && decoder_callbacks_->route()->routeEntry()) {
+    const std::string& name = Extensions::HttpFilters::HttpFilterNames::get().Adapt;
+    const auto* route_entry = decoder_callbacks_->route()->routeEntry();
+
+    const AdaptSettings* tmp = route_entry->perFilterConfigTyped<AdaptSettings>(name);
+    const AdaptSettings* per_route_settings = tmp ? tmp : route_entry->virtualHost().perFilterConfigTyped<AdaptSettings>(name);
+    if (per_route_settings) {
+      adapt_settings_ = per_route_settings;
+      ENVOY_LOG(critical, "Using per route settings. Encode deadline: {}", adapt_settings_->get_encode_deadline());
+      //const std::string& route_name = route_entry->virtualHost().name();
+    }
+  }
+
   request_ = std::make_shared<Message>(decoder_callbacks_, headers);
   request_->headers_only_ = end_stream;
   request_->size_ += headers.size();

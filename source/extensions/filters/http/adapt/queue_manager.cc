@@ -9,6 +9,10 @@ namespace Extensions {
 namespace HttpFilters {
 namespace AdaptFilter {
 
+// Static variables
+std::unordered_map<std::string, QueueManager*> QueueManager::managers_;
+std::mutex QueueManager::mtx_;
+
 QueueManager::QueueManager() : encode_q_(true, false), decode_q_(false, false) {
 
   // Start decoder timer
@@ -26,6 +30,21 @@ QueueManager::QueueManager() : encode_q_(true, false), decode_q_(false, false) {
       std::this_thread::sleep_for(ms);
     }
   }).detach();
+}
+
+QueueManager& QueueManager::Instance() {
+  return Instance("global");
+}
+
+QueueManager& QueueManager::Instance(std::string route) {
+  std::lock_guard<std::mutex> lck(mtx_);
+  auto it = managers_.find(route);
+  if (it != managers_.end()) {
+    return *(*it).second;
+  } else {
+    managers_[route] = new QueueManager();
+    return *managers_[route];
+  }
 }
 
 void QueueManager::SetDecodeMaxKbps(uint64_t max_kbps) {
@@ -48,6 +67,7 @@ void QueueManager::AddRedirectAdaptation(std::string orig_host, std::string to_i
 }
 
 bool QueueManager::MessageInDecoderQueue(MessageSharedPtr m) { return decode_q_.FindInQueue(m); }
+
 bool QueueManager::MessageInEncoderQueue(MessageSharedPtr m) { return encode_q_.FindInQueue(m); }
 
 void QueueManager::AddEncoderToQueue(MessageSharedPtr m) { encode_q_.Push(m); }

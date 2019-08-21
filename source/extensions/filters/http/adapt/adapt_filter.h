@@ -70,7 +70,7 @@ public:
 private:
   static InstanceStats generateStats(const std::string& name, Stats::Scope &scope);
 
-  AdaptSettings settings_;
+  const AdaptSettings settings_;
   const InstanceStats stats_;
   TimeSource& time_source_;
 };
@@ -118,6 +118,7 @@ public:
 private:
 
   ConfigSharedPtr config_;
+  const AdaptSettings* adapt_settings_;
   Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
   Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
 

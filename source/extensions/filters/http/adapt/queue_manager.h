@@ -19,13 +19,11 @@ namespace AdaptFilter {
 class QueueManager : Logger::Loggable<Logger::Id::filter> {
 public:
   /**
-   * Queue Manager is a singleton instance that spawns a thread for
+   * Queue Manager is a instance that spawns a thread for
    * both our encode and decode queues to rate limit requests.
    */
-  static QueueManager& Instance() {
-    static QueueManager instance;
-    return instance;
-  }
+  static QueueManager& Instance(); // return global queue manager
+  static QueueManager& Instance(std::string route);
 
   void SetDecodeMaxKbps(uint64_t max_kbps);
   void SetEncodeMaxKbps(uint64_t max_kbps);
@@ -40,7 +38,18 @@ public:
    */
   void AddRedirectAdaptation(std::string orig_host, std::string to_ip, uint64_t queue_length);
 
+  /**
+   * Check if message is in queue, returns true if it is.
+   * Currently this is only used as a sanity check that a message isn't in the queue 
+   * when the filter is destroyed
+   */
   bool MessageInDecoderQueue(MessageSharedPtr m);
+
+  /**
+   * Check if message is in queue, returns true if it is.
+   * Currently this is only used as a sanity check that a message isn't in the queue 
+   * when the filter is destroyed
+   */
   bool MessageInEncoderQueue(MessageSharedPtr m);
 
   /**
@@ -58,6 +67,8 @@ protected:
   ~QueueManager(){};
 
 private:
+  static std::unordered_map<std::string, QueueManager*> managers_;
+  static std::mutex mtx_;
   Queue encode_q_;
   Queue decode_q_;
 };
