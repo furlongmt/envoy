@@ -50,10 +50,10 @@ void Queue::Push(MessageSharedPtr req) {
   transform_set_.insert(req);
   bytes_in_q_ += req->size();
   ENVOY_LOG(trace, "limiter: adding request with size {}, new queue size in bytes = {}", req->size(), bytes_in_q_);
-  if (!encode_) // TODO: just for demo
-    std::cout << "Queue size: " << queue_.size() << std::endl;
   // Potentially adapt queue when we add a new request
   adapt_queue();
+  if (!encode_) // TODO: just for demo
+    std::cout << "Queue size: " << queue_.size() << std::endl;
   cv_.notify_one();
 }
 
@@ -319,7 +319,8 @@ void Queue::drop_every_nth_request(uint64_t n) {
 void Queue::drop_first_n_requests(uint64_t n) {
 
   ENVOY_LOG(critical, "Dropping first {} messages in queue of size {}", n, queue_.size());
-  for (uint64_t i = 0; i < n && i < queue_.size(); i++) {
+  uint64_t queue_size = queue_.size();
+  for (uint64_t i = 0; i < n && i < queue_size; i++) {
     drop(queue_.begin());
   }
 }
