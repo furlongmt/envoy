@@ -334,7 +334,8 @@ void Queue::drop_every_nth_request(uint64_t n) {
 void Queue::drop_first_n_requests(uint64_t n) {
 
   ENVOY_LOG(critical, "Dropping first {} messages in queue of size {}", n, queue_.size());
-  for (uint64_t i = 0; i < n && i < queue_.size(); i++) {
+  uint64_t queue_size = queue_.size();
+  for (uint64_t i = 0; i < n && i < queue_size; i++) {
     drop(queue_.begin());
   }
 }
