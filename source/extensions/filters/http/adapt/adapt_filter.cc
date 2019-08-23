@@ -18,6 +18,7 @@ AdaptSettings::AdaptSettings(const envoy::config::filter::http::adapt::v2::Adapt
   QueueManager::Instance().SetEncodeMaxKbps(config.encode_limit_kbps());
   for (const envoy::config::filter::http::adapt::v2::AdaptRateLimit_DropRequests& drop_request :
        config.drop_requests()) {
+    // QueueManager::Instance() is basically global var.
     QueueManager::Instance().AddDropAdaptation(drop_request.type(), drop_request.value(),
                                                drop_request.queue_length());
   }
@@ -42,6 +43,7 @@ InstanceStats AdaptConfig::generateStats(const std::string& name, Stats::Scope& 
                           POOL_GAUGE_PREFIX(scope, final_prefix))};
 }
 
+// this holds config obj passed by anonymous function
 Adapt::Adapt(ConfigSharedPtr config)
     : config_(config) {
       ENVOY_LOG(trace, "New adapt filter created.");
@@ -68,7 +70,7 @@ void Adapt::onDestroy() {
         decode_time_span.count() <= config_->settings()->get_decode_deadline()) {
       config_->stats().request_bytes_made_dl_.add(request_->size_);
     }
-    if (!request_->dropped_) { // If the request wasn't dropped, than include this message in our
+    if (!request_->dropped_) { // If the request wasn't dropped, then include this message in our
                                // bytes sent
       config_->stats().request_total_bytes_sent_.add(request_->size_);
     }
@@ -106,6 +108,7 @@ void Adapt::onDestroy() {
 } // namespace AdaptFilter
 
 #ifdef DECODE
+// per request
 Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap& headers, bool end_stream) {
   request_ = std::make_shared<Message>(decoder_callbacks_, headers);
   request_->headers_only_ = end_stream;
@@ -125,6 +128,7 @@ Http::FilterHeadersStatus Adapt::decodeHeaders(Http::HeaderMap&, bool) {
 Http::FilterDataStatus Adapt::decodeData(Buffer::Instance& data, bool) {
   ENVOY_LOG(trace, "Writing {} bytes to buffer.", data.length());
   request_->size_ += data.length();
+  // don't pass to next filter & don't send till call continue decoding func.
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
 #else

@@ -22,6 +22,8 @@ QueueManager::QueueManager() : encode_q_(true, false), decode_q_(false, false) {
   // Start encoder timer
   std::thread([this]() {
     while (true) {
+    // JOSEPH: returns time before enough token for the request in the head of
+    // queue can be sent & sleep for that amount.
       std::chrono::milliseconds ms = encode_q_.DrainRequest();
       std::this_thread::sleep_for(ms);
     }

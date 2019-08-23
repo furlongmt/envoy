@@ -22,16 +22,29 @@ namespace Extensions {
 namespace HttpFilters {
 namespace AdaptFilter {
 
+// 1. creates new config 
+// 2. 
 Http::FilterFactoryCb AdaptFilterFactory::createFilterFactoryFromProtoTyped(
     const envoy::config::filter::http::adapt::v2::AdaptRateLimit& config,
     const std::string& stats_prefix, Server::Configuration::FactoryContext& context) {
+  // creates a new config
   ConfigSharedPtr filter_config(
       new AdaptConfig(config, context.scope(), stats_prefix, context.timeSource()));
+  // adds filter to callback. This is anonymous function
+  // Adapt is name of object
   return [filter_config](Http::FilterChainFactoryCallbacks& callbacks) -> void {
     callbacks.addStreamFilter(std::make_shared<Adapt>(filter_config));
   };
 }
 
+/*
+ * this function takes JSON and converts into proto config, which Envoy uses
+ * 2 types of APIs: json & proto 
+ * Envoy config (~yaml, which is subset of json)
+ * Filter config uses protobuf, which can be found in envoy/api/envoy/config/filter/http/adapt/v2    
+ * --> this is used for populating protobuf automatically
+ * 
+ */
 void AdaptFilterFactory::translateHttpAdaptFilter(
     const Json::Object& json_config,
     envoy::config::filter::http::adapt::v2::AdaptRateLimit& proto_config) {
@@ -76,6 +89,7 @@ AdaptFilterFactory::createRouteSpecificFilterConfigTyped(
 
 /**
  * Static registration for this sample filter. @see RegisterFactory.
+ * macro regi
  */
 REGISTER_FACTORY(AdaptFilterFactory, Server::Configuration::NamedHttpFilterConfigFactory);
 

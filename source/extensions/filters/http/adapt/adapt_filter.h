@@ -79,6 +79,9 @@ using ConfigSharedPtr = std::shared_ptr<AdaptConfig>;
 
 /**
  * Implementation of an adaptation filter (both upstream and downstream traffic).
+ * app perspective:
+ *  upstream --> ingress 
+ *  downstream --> egress
  */
 class Adapt : public Http::StreamFilter,
               public Logger::Loggable<Logger::Id::filter> {

@@ -88,6 +88,8 @@ std::chrono::milliseconds Queue::DrainRequest() {
   } 
 
   // Wait while our queue is empty
+  // & --> this 
+  // [&] --> input and to access the queue variable
   cv_.wait(lck, [&] { return !queue_.empty(); });
 
   ENVOY_LOG(critical, "limiter: timer wakeup: buffered bytes in queue={}", bytes_in_q_);
@@ -117,12 +119,14 @@ std::chrono::milliseconds Queue::DrainRequest() {
   }
 
   uint64_t tokens_needed = 0;
+  // get from the queue! BUT not popping 
   MessageSharedPtr req = queue_.front();
   uint64_t request_size = req->size_;
 
   ENVOY_LOG(trace, "limiter: request size = {}", request_size);
 
   tokens_needed = (request_size + bytes_per_time_slice_ - 1) / bytes_per_time_slice_;
+  // false: no partial token to be returned
   const uint64_t tokens_obtained = token_bucket_.consume(tokens_needed, false);
 
   // TODO: I can't remember why I have this req->headers_only_
@@ -146,6 +150,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
         try {
           ASSERT(cb != nullptr);
           //ENVOY_LOG(critical, "Network state: {}", cb->connection()->state());
+          // continue encoding --> keep going!
           cb->continueEncoding();
         } catch (...) { // TODO: This seems dangerous
           ENVOY_LOG(error, "Exception when continuing encoding...");
@@ -184,6 +189,7 @@ std::chrono::milliseconds Queue::DrainRequest() {
   return token_bucket_.allTokensAvailable(tokens_needed);
 }
 
+// JOSEPH: this is prob. where I want to make many many modifications :( 
 void Queue::adapt_queue() {
   /**
    * This is just one simple transformation that I did for testing purposes
@@ -300,6 +306,8 @@ std::list<MessageSharedPtr>::iterator Queue::drop(std::list<MessageSharedPtr>::i
       //cb->streamInfo().setResponseFlag(StreamInfo::ResponseFlag::FaultInjected);
       ASSERT(cb != nullptr);
       ASSERT(cb->connection()->state() == Network::Connection::State::Open);
+
+      // tell app that it's being dropped
       cb->sendLocalReply(Http::Code::TooManyRequests, "", nullptr, absl::nullopt);
     }); 
 
@@ -334,6 +342,7 @@ void Queue::drop_every_nth_request(uint64_t n) {
 void Queue::drop_first_n_requests(uint64_t n) {
 
   ENVOY_LOG(critical, "Dropping first {} messages in queue of size {}", n, queue_.size());
+  // b/c queue_.size() is updated upon dropping
   uint64_t queue_size = queue_.size();
   for (uint64_t i = 0; i < n && i < queue_size; i++) {
     drop(queue_.begin());

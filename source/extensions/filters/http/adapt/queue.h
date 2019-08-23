@@ -160,7 +160,7 @@ private:
   // is KiB per second, divided into 1024 segments, ~1ms apart. 1024 is used because it divides
   // into 1024 evenly.
   const uint64_t SecondDivisor = 1024;
-  const uint64_t MaxTokens = 10000; // This number is completely random
+  const uint64_t MaxTokens = 100000000; // This number is completely random
 
   static RealTimeSource time_source_;
 
